@@ -1,0 +1,62 @@
+%% Database Entity Relationship Diagram
+
+erDiagram
+    HUB_CONFIG ||--o{ INSTALLATION_TOKENS : "provides config for"
+    INSTALLATION_TOKENS ||--o| SPOKE_REGISTRATIONS : "consumed by"
+    PROXMOX_CLUSTERS ||--o{ SPOKE_REGISTRATIONS : "contains"
+
+    HUB_CONFIG {
+        int id PK "Always 1 (singleton)"
+        string interface_address "10.0.1.1/24"
+        int listen_port "51820"
+        string private_key "Base64 encoded"
+        string public_key "Base64 encoded"
+        string network_cidr "10.0.1.0/24"
+        json dns "Optional DNS servers"
+        string endpoint "Public IP:port"
+        datetime created_at
+        datetime updated_at
+    }
+
+    INSTALLATION_TOKENS {
+        string id PK "UUID"
+        string token UK "32-byte base64url"
+        string spoke_id UK "Pre-assigned UUID"
+        string spoke_name "User-friendly name"
+        json allowed_ips "Allocated IP list"
+        datetime created_at
+        datetime expires_at "24 hours from created"
+        boolean used "0 or 1"
+        datetime used_at "When consumed"
+        string hub_endpoint "From hub_config"
+        string hub_public_key "From hub_config"
+        string network_cidr "From hub_config"
+        json dns "Optional"
+        int persistent_keepalive "Default 25"
+    }
+
+    SPOKE_REGISTRATIONS {
+        string id PK "Same as spoke_id from token"
+        string token_id FK "Links to token"
+        string name "Spoke name"
+        string public_key UK "Spoke's public key"
+        json allowed_ips "IP assignments"
+        datetime registered_at
+        datetime last_handshake "From wg show"
+        string status "pending/active/inactive"
+        string os "linux/macos/windows/proxmox"
+        boolean is_proxmox "True for Proxmox nodes"
+        string proxmox_cluster_id FK "Links to cluster"
+        string proxmox_node_name "pve1, pve2, etc"
+        string proxmox_version "Proxmox VE version"
+        json metadata "Extensible field"
+    }
+
+    PROXMOX_CLUSTERS {
+        string id PK "UUID"
+        string cluster_name UK "From pvecm status"
+        string datacenter "User metadata"
+        string description "User metadata"
+        datetime created_at
+        datetime updated_at
+    }

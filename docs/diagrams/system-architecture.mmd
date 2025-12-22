@@ -1,0 +1,64 @@
+%% System Architecture Diagram
+%% Mermaid format for rendering
+
+graph TB
+    subgraph "Client Layer"
+        A1[Admin Browser]
+        S1[Spoke: Linux]
+        S2[Spoke: macOS]
+        S3[Spoke: Windows]
+        S4[Spoke: Proxmox Cluster]
+    end
+
+    subgraph "Hub Server"
+        subgraph "Web Layer"
+            RP[Reverse Proxy<br/>nginx/Caddy<br/>:443 HTTPS]
+            SPA[React Dashboard<br/>Static Files]
+        end
+
+        subgraph "Application Layer"
+            API[Express API<br/>Node.js<br/>:3000]
+            TC[TokenService]
+            WG[WireGuardService]
+            IP[IPAddressPool]
+            SG[ScriptGenerator]
+        end
+
+        subgraph "Data Layer"
+            DB[(SQLite Database)]
+            WGI[WireGuard Interface<br/>wg0<br/>:51820 UDP]
+        end
+    end
+
+    subgraph "VPN Network"
+        VPN[10.0.1.0/24<br/>Hub-and-Spoke Mesh]
+    end
+
+    A1 -->|HTTPS| RP
+    RP -->|Serve Static| SPA
+    RP -->|Proxy /api/*| API
+
+    S1 & S2 & S3 & S4 -->|curl install script| API
+    S1 & S2 & S3 & S4 -->|POST /spoke/register| API
+
+    API --> TC
+    API --> WG
+    API --> IP
+    API --> SG
+    API --> DB
+
+    WG -->|wg set, wg-quick| WGI
+
+    S1 & S2 & S3 & S4 -.->|WireGuard VPN| VPN
+    WGI -.->|WireGuard VPN| VPN
+
+    style A1 fill:#e1f5ff
+    style S1 fill:#fff4e1
+    style S2 fill:#fff4e1
+    style S3 fill:#fff4e1
+    style S4 fill:#e8f5e9
+    style RP fill:#f3e5f5
+    style API fill:#fff3e0
+    style DB fill:#e0f2f1
+    style WGI fill:#fce4ec
+    style VPN fill:#f1f8e9

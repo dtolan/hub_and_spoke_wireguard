@@ -1,0 +1,79 @@
+%% Production Deployment Architecture
+
+graph TB
+    subgraph "Internet"
+        DNS[DNS: hub.example.com<br/>A Record → 203.0.113.5]
+        CLIENT[Client Browsers<br/>Admin Dashboard Access]
+        SPOKES[Spoke Devices<br/>Installation Scripts]
+    end
+
+    subgraph "DMZ / Firewall"
+        FW[Firewall Rules<br/>443/tcp HTTPS<br/>51820/udp WireGuard]
+    end
+
+    subgraph "Hub Server: Ubuntu 22.04"
+        subgraph "Reverse Proxy Layer"
+            NGINX[Nginx<br/>:443 HTTPS<br/>TLS Termination]
+        end
+
+        subgraph "Application Layer"
+            STATIC[Static Files<br/>dist/<br/>React SPA]
+            EXPRESS[Express API<br/>:3000<br/>Node.js Process]
+        end
+
+        subgraph "Service Layer"
+            TOKEN[TokenService]
+            WGSERVICE[WireGuardService]
+            IPPOOL[IPAddressPool]
+            SCRIPT[ScriptGenerator]
+        end
+
+        subgraph "Data Layer"
+            SQLITE[(SQLite DB<br/>/var/lib/wireguard-hub/<br/>database.sqlite)]
+        end
+
+        subgraph "System Layer"
+            WG0[WireGuard Interface<br/>wg0<br/>:51820 UDP<br/>Kernel Module]
+            SYSTEMD[systemd Services<br/>wg-quick@wg0<br/>wireguard-hub-api]
+        end
+    end
+
+    subgraph "Monitoring & Backup"
+        PROM[Prometheus<br/>Metrics Collection]
+        GRAFANA[Grafana<br/>Dashboards]
+        BACKUP[Daily Backups<br/>DB + Hub Keys<br/>GPG Encrypted]
+    end
+
+    DNS --> FW
+    CLIENT --> FW
+    SPOKES --> FW
+
+    FW -->|443/tcp| NGINX
+    FW -->|51820/udp| WG0
+
+    NGINX -->|Serve| STATIC
+    NGINX -->|Proxy /api/*| EXPRESS
+
+    EXPRESS --> TOKEN
+    EXPRESS --> WGSERVICE
+    EXPRESS --> IPPOOL
+    EXPRESS --> SCRIPT
+
+    TOKEN --> SQLITE
+    WGSERVICE --> SQLITE
+    WGSERVICE -->|wg set, wg-quick| WG0
+
+    SYSTEMD -->|Manages| WG0
+    SYSTEMD -->|Manages| EXPRESS
+
+    EXPRESS -.->|Export Metrics| PROM
+    PROM --> GRAFANA
+
+    SQLITE -.->|Cron Daily| BACKUP
+
+    style FW fill:#f44336,color:#fff
+    style NGINX fill:#009688,color:#fff
+    style EXPRESS fill:#ff9800,color:#fff
+    style SQLITE fill:#2196f3,color:#fff
+    style WG0 fill:#9c27b0,color:#fff
+    style BACKUP fill:#4caf50,color:#fff

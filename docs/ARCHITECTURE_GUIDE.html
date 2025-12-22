@@ -1,0 +1,3405 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hub-and-Spoke WireGuard VPN - Architecture Guide</title>
+  <style>
+@page {
+  size: Letter;
+  margin: 0.75in;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  color: #333;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+h1 {
+  font-size: 24pt;
+  font-weight: bold;
+  color: #1a1a1a;
+  margin-top: 24pt;
+  margin-bottom: 12pt;
+  page-break-before: auto;
+  page-break-after: avoid;
+  border-bottom: 2pt solid #2c3e50;
+  padding-bottom: 6pt;
+}
+
+h2 {
+  font-size: 18pt;
+  font-weight: bold;
+  color: #2c3e50;
+  margin-top: 18pt;
+  margin-bottom: 10pt;
+  page-break-after: avoid;
+  border-bottom: 1pt solid #95a5a6;
+  padding-bottom: 4pt;
+}
+
+h3 {
+  font-size: 14pt;
+  font-weight: bold;
+  color: #34495e;
+  margin-top: 14pt;
+  margin-bottom: 8pt;
+  page-break-after: avoid;
+}
+
+h4 {
+  font-size: 12pt;
+  font-weight: bold;
+  color: #555;
+  margin-top: 12pt;
+  margin-bottom: 6pt;
+}
+
+p {
+  margin-bottom: 10pt;
+  text-align: justify;
+  orphans: 3;
+  widows: 3;
+}
+
+code {
+  font-family: 'Courier New', monospace;
+  font-size: 9pt;
+  background-color: #f4f4f4;
+  padding: 2pt 4pt;
+  border-radius: 2pt;
+  color: #c7254e;
+}
+
+pre {
+  background-color: #f8f8f8;
+  border: 1pt solid #ddd;
+  border-radius: 4pt;
+  padding: 10pt;
+  overflow-x: auto;
+  margin: 10pt 0;
+  page-break-inside: avoid;
+}
+
+pre code {
+  background-color: transparent;
+  padding: 0;
+  color: #333;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12pt 0;
+  font-size: 10pt;
+  page-break-inside: avoid;
+}
+
+th {
+  background-color: #2c3e50;
+  color: white;
+  font-weight: bold;
+  padding: 8pt;
+  text-align: left;
+  border: 1pt solid #ddd;
+}
+
+td {
+  padding: 6pt 8pt;
+  border: 1pt solid #ddd;
+}
+
+tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+ul, ol {
+  margin: 10pt 0;
+  padding-left: 24pt;
+}
+
+li {
+  margin-bottom: 4pt;
+}
+
+blockquote {
+  border-left: 4pt solid #2c3e50;
+  padding-left: 12pt;
+  margin: 12pt 0;
+  color: #555;
+  font-style: italic;
+}
+
+a {
+  color: #2980b9;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Mermaid diagram styling */
+.mermaid {
+  display: block;
+  text-align: center;
+  margin: 16pt 0;
+  page-break-inside: avoid;
+}
+
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Table of contents */
+.toc-container {
+  background-color: #ecf0f1;
+  padding: 16pt;
+  margin: 20pt 0;
+  border-radius: 4pt;
+  page-break-inside: avoid;
+}
+
+.toc-container h2 {
+  margin-top: 0;
+  border-bottom: none;
+}
+
+.table-of-contents {
+  list-style: none;
+  padding-left: 0;
+}
+
+.table-of-contents li {
+  margin-bottom: 4pt;
+}
+
+.table-of-contents a {
+  color: #2c3e50;
+}
+
+/* Cover page styling */
+.cover-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  text-align: center;
+  page-break-after: always;
+}
+
+.cover-page h1 {
+  font-size: 32pt;
+  border-bottom: none;
+  margin-bottom: 8pt;
+}
+
+.cover-page .subtitle {
+  font-size: 18pt;
+  color: #7f8c8d;
+  margin-bottom: 32pt;
+}
+
+.cover-page .metadata {
+  font-size: 12pt;
+  color: #95a5a6;
+  margin-top: 32pt;
+}
+
+/* Page numbers (handled by Puppeteer) */
+@media print {
+  .page-number {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    font-size: 10pt;
+    color: #7f8c8d;
+  }
+}
+
+/* Avoid page breaks inside certain elements */
+figure, .code-block, .diagram, .table-container {
+  page-break-inside: avoid;
+}
+
+/* Print optimizations */
+@media print {
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+
+  img {
+    max-width: 100%;
+    page-break-inside: avoid;
+  }
+}
+</style>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'default',
+      securityLevel: 'loose',
+      flowchart: {
+        useMaxWidth: true,
+        htmlLabels: true
+      }
+    });
+  </script>
+</head>
+<body>
+  <h1>Hub-and-Spoke WireGuard VPN System</h1>
+<h2>Complete Architecture and Implementation Guide</h2>
+<p><strong>Version:</strong> 1.0
+<strong>Date:</strong> December 2025
+<strong>Status:</strong> Design Review - Awaiting Chief Architect Approval</p>
+<hr>
+<h2>Executive Summary</h2>
+<p>This document presents a comprehensive design for a hub-and-spoke WireGuard VPN management system with automated spoke provisioning, one-time-use installation tokens, and multi-platform support including Proxmox VE cluster integration.</p>
+<h3>Key Features</h3>
+<ul>
+<li><strong>One-Time-Use Installation Tokens</strong>: 256-bit cryptographically secure tokens with 24-hour expiration</li>
+<li><strong>Multi-Platform Support</strong>: Linux, macOS, Windows, and Proxmox VE</li>
+<li><strong>Zero-Trust Key Generation</strong>: Spoke private keys generated locally, never transmitted</li>
+<li><strong>Automated Provisioning</strong>: Single-command installation with automatic WireGuard configuration</li>
+<li><strong>Proxmox Cluster Integration</strong>: Auto-detection and management of multi-datacenter Proxmox clusters</li>
+<li><strong>Web-Based Dashboard</strong>: React + TypeScript frontend for centralized management</li>
+<li><strong>RESTful API</strong>: Express + TypeScript backend with SQLite database</li>
+</ul>
+<h3>Technology Stack</h3>
+<ul>
+<li><strong>Frontend</strong>: React 18, TypeScript, Vite, TailwindCSS</li>
+<li><strong>Backend</strong>: Node.js, Express, TypeScript, better-sqlite3</li>
+<li><strong>VPN</strong>: WireGuard (kernel-level implementation)</li>
+<li><strong>Database</strong>: SQLite (POC), PostgreSQL (production migration path)</li>
+<li><strong>Deployment</strong>: Ubuntu 22.04+, Nginx reverse proxy, Let’s Encrypt TLS</li>
+</ul>
+<hr>
+<h2>Table of Contents</h2>
+<ol>
+<li><a href="#1-system-architecture">System Architecture</a></li>
+<li><a href="#2-deployment-architecture">Deployment Architecture</a></li>
+<li><a href="#3-spoke-provisioning-flow">Spoke Provisioning Flow</a></li>
+<li><a href="#4-database-design">Database Design</a></li>
+<li><a href="#5-security-model">Security Model</a></li>
+<li><a href="#6-proxmox-multi-cluster-architecture">Proxmox Multi-Cluster Architecture</a></li>
+<li><a href="#7-api-specification">API Specification</a></li>
+<li><a href="#8-installation-script-design">Installation Script Design</a></li>
+<li><a href="#9-frontend-components">Frontend Components</a></li>
+<li><a href="#10-backend-services">Backend Services</a></li>
+<li><a href="#11-deployment-guide">Deployment Guide</a></li>
+<li><a href="#12-testing-strategy">Testing Strategy</a></li>
+<li><a href="#13-operations-and-monitoring">Operations and Monitoring</a></li>
+<li><a href="#14-risk-assessment">Risk Assessment</a></li>
+<li><a href="#15-implementation-roadmap">Implementation Roadmap</a></li>
+</ol>
+<hr>
+<h2>1. System Architecture</h2>
+<h3>High-Level Component Diagram</h3>
+<pre><code class="language-mermaid">%% System Architecture Diagram
+%% Mermaid format for rendering
+
+graph TB
+    subgraph &quot;Client Layer&quot;
+        A1[Admin Browser]
+        S1[Spoke: Linux]
+        S2[Spoke: macOS]
+        S3[Spoke: Windows]
+        S4[Spoke: Proxmox Cluster]
+    end
+
+    subgraph &quot;Hub Server&quot;
+        subgraph &quot;Web Layer&quot;
+            RP[Reverse Proxy&lt;br/&gt;nginx/Caddy&lt;br/&gt;:443 HTTPS]
+            SPA[React Dashboard&lt;br/&gt;Static Files]
+        end
+
+        subgraph &quot;Application Layer&quot;
+            API[Express API&lt;br/&gt;Node.js&lt;br/&gt;:3000]
+            TC[TokenService]
+            WG[WireGuardService]
+            IP[IPAddressPool]
+            SG[ScriptGenerator]
+        end
+
+        subgraph &quot;Data Layer&quot;
+            DB[(SQLite Database)]
+            WGI[WireGuard Interface&lt;br/&gt;wg0&lt;br/&gt;:51820 UDP]
+        end
+    end
+
+    subgraph &quot;VPN Network&quot;
+        VPN[10.0.1.0/24&lt;br/&gt;Hub-and-Spoke Mesh]
+    end
+
+    A1 --&gt;|HTTPS| RP
+    RP --&gt;|Serve Static| SPA
+    RP --&gt;|Proxy /api/*| API
+
+    S1 &amp; S2 &amp; S3 &amp; S4 --&gt;|curl install script| API
+    S1 &amp; S2 &amp; S3 &amp; S4 --&gt;|POST /spoke/register| API
+
+    API --&gt; TC
+    API --&gt; WG
+    API --&gt; IP
+    API --&gt; SG
+    API --&gt; DB
+
+    WG --&gt;|wg set, wg-quick| WGI
+
+    S1 &amp; S2 &amp; S3 &amp; S4 -.-&gt;|WireGuard VPN| VPN
+    WGI -.-&gt;|WireGuard VPN| VPN
+
+    style A1 fill:#e1f5ff
+    style S1 fill:#fff4e1
+    style S2 fill:#fff4e1
+    style S3 fill:#fff4e1
+    style S4 fill:#e8f5e9
+    style RP fill:#f3e5f5
+    style API fill:#fff3e0
+    style DB fill:#e0f2f1
+    style WGI fill:#fce4ec
+    style VPN fill:#f1f8e9
+
+</code></pre>
+<p><strong>Figure: System Architecture</strong></p>
+<p>The system consists of five major layers:</p>
+<h4>1.1 Presentation Layer (React Dashboard)</h4>
+<ul>
+<li><strong>Technology</strong>: React 18 + TypeScript + Vite</li>
+<li><strong>Purpose</strong>: Web-based management interface</li>
+<li><strong>Key Components</strong>:
+<ul>
+<li>HubInitializer: First-run setup wizard</li>
+<li>SpokeManager: Spoke list and token generation</li>
+<li>ProxmoxClusterView: Hierarchical cluster visualization</li>
+<li>InstallationInstructions: Platform-specific installation commands</li>
+</ul>
+</li>
+</ul>
+<h4>1.2 API Layer (Express Backend)</h4>
+<ul>
+<li><strong>Technology</strong>: Express.js + TypeScript</li>
+<li><strong>Port</strong>: 3000 (internal), proxied via Nginx on 443</li>
+<li><strong>Endpoints</strong>:
+<ul>
+<li><code>/api/hub/*</code> - Hub management</li>
+<li><code>/api/installation/*</code> - Token and script serving</li>
+<li><code>/api/spoke/*</code> - Spoke registration and status</li>
+<li><code>/api/proxmox/*</code> - Proxmox cluster management</li>
+</ul>
+</li>
+</ul>
+<h4>1.3 Service Layer</h4>
+<ul>
+<li><strong>TokenService</strong>: Secure token generation and validation</li>
+<li><strong>WireGuardService</strong>: Hub configuration and peer management</li>
+<li><strong>ScriptGenerator</strong>: Template rendering for installation scripts</li>
+<li><strong>IPAddressPool</strong>: CIDR-based IP allocation</li>
+</ul>
+<h4>1.4 Data Layer</h4>
+<ul>
+<li><strong>Database</strong>: SQLite (better-sqlite3)</li>
+<li><strong>Location</strong>: <code>/var/lib/wireguard-hub/database.sqlite</code></li>
+<li><strong>Tables</strong>: hub_config, installation_tokens, spoke_registrations, proxmox_clusters</li>
+</ul>
+<h4>1.5 System Layer</h4>
+<ul>
+<li><strong>WireGuard Interface</strong>: <code>wg0</code> kernel module</li>
+<li><strong>Port</strong>: 51820/udp</li>
+<li><strong>Management</strong>: systemd services (<code>wg-quick@wg0</code>, <code>wireguard-hub-api</code>)</li>
+</ul>
+<h3>1.6 Network Topology</h3>
+<p><strong>Hub-and-Spoke Model</strong>:</p>
+<pre><code>Hub (10.0.1.1) ← → Spoke 1 (10.0.1.10)
+                ← → Spoke 2 (10.0.1.11)
+                ← → Spoke 3 (10.0.1.12)
+                ← → ... (up to 253 spokes on /24 network)
+</code></pre>
+<p><strong>Key Characteristics</strong>:</p>
+<ul>
+<li>All traffic routes through hub (star topology)</li>
+<li>No direct spoke-to-spoke communication by default</li>
+<li>Hub acts as router for 10.0.1.0/24 network</li>
+<li>Each spoke maintains single persistent connection to hub</li>
+</ul>
+<hr>
+<h2>2. Deployment Architecture</h2>
+<h3>Production Deployment Diagram</h3>
+<pre><code class="language-mermaid">%% Production Deployment Architecture
+
+graph TB
+    subgraph &quot;Internet&quot;
+        DNS[DNS: hub.example.com&lt;br/&gt;A Record → 203.0.113.5]
+        CLIENT[Client Browsers&lt;br/&gt;Admin Dashboard Access]
+        SPOKES[Spoke Devices&lt;br/&gt;Installation Scripts]
+    end
+
+    subgraph &quot;DMZ / Firewall&quot;
+        FW[Firewall Rules&lt;br/&gt;443/tcp HTTPS&lt;br/&gt;51820/udp WireGuard]
+    end
+
+    subgraph &quot;Hub Server: Ubuntu 22.04&quot;
+        subgraph &quot;Reverse Proxy Layer&quot;
+            NGINX[Nginx&lt;br/&gt;:443 HTTPS&lt;br/&gt;TLS Termination]
+        end
+
+        subgraph &quot;Application Layer&quot;
+            STATIC[Static Files&lt;br/&gt;dist/&lt;br/&gt;React SPA]
+            EXPRESS[Express API&lt;br/&gt;:3000&lt;br/&gt;Node.js Process]
+        end
+
+        subgraph &quot;Service Layer&quot;
+            TOKEN[TokenService]
+            WGSERVICE[WireGuardService]
+            IPPOOL[IPAddressPool]
+            SCRIPT[ScriptGenerator]
+        end
+
+        subgraph &quot;Data Layer&quot;
+            SQLITE[(SQLite DB&lt;br/&gt;/var/lib/wireguard-hub/&lt;br/&gt;database.sqlite)]
+        end
+
+        subgraph &quot;System Layer&quot;
+            WG0[WireGuard Interface&lt;br/&gt;wg0&lt;br/&gt;:51820 UDP&lt;br/&gt;Kernel Module]
+            SYSTEMD[systemd Services&lt;br/&gt;wg-quick@wg0&lt;br/&gt;wireguard-hub-api]
+        end
+    end
+
+    subgraph &quot;Monitoring &amp; Backup&quot;
+        PROM[Prometheus&lt;br/&gt;Metrics Collection]
+        GRAFANA[Grafana&lt;br/&gt;Dashboards]
+        BACKUP[Daily Backups&lt;br/&gt;DB + Hub Keys&lt;br/&gt;GPG Encrypted]
+    end
+
+    DNS --&gt; FW
+    CLIENT --&gt; FW
+    SPOKES --&gt; FW
+
+    FW --&gt;|443/tcp| NGINX
+    FW --&gt;|51820/udp| WG0
+
+    NGINX --&gt;|Serve| STATIC
+    NGINX --&gt;|Proxy /api/*| EXPRESS
+
+    EXPRESS --&gt; TOKEN
+    EXPRESS --&gt; WGSERVICE
+    EXPRESS --&gt; IPPOOL
+    EXPRESS --&gt; SCRIPT
+
+    TOKEN --&gt; SQLITE
+    WGSERVICE --&gt; SQLITE
+    WGSERVICE --&gt;|wg set, wg-quick| WG0
+
+    SYSTEMD --&gt;|Manages| WG0
+    SYSTEMD --&gt;|Manages| EXPRESS
+
+    EXPRESS -.-&gt;|Export Metrics| PROM
+    PROM --&gt; GRAFANA
+
+    SQLITE -.-&gt;|Cron Daily| BACKUP
+
+    style FW fill:#f44336,color:#fff
+    style NGINX fill:#009688,color:#fff
+    style EXPRESS fill:#ff9800,color:#fff
+    style SQLITE fill:#2196f3,color:#fff
+    style WG0 fill:#9c27b0,color:#fff
+    style BACKUP fill:#4caf50,color:#fff
+
+</code></pre>
+<p><strong>Figure: Deployment Architecture</strong></p>
+<h3>2.1 Infrastructure Requirements</h3>
+<p><strong>Hub Server Specifications</strong>:</p>
+<ul>
+<li><strong>OS</strong>: Ubuntu 22.04 LTS or newer</li>
+<li><strong>CPU</strong>: 2+ cores (4+ recommended for high spoke count)</li>
+<li><strong>RAM</strong>: 4GB minimum (8GB recommended)</li>
+<li><strong>Storage</strong>: 20GB+ SSD</li>
+<li><strong>Network</strong>: Public IPv4 address, 1Gbps+ link</li>
+<li><strong>Ports</strong>: 443/tcp (HTTPS), 51820/udp (WireGuard)</li>
+</ul>
+<p><strong>DNS Configuration</strong>:</p>
+<pre><code>hub.example.com    A    203.0.113.5
+</code></pre>
+<h3>2.2 Service Architecture</h3>
+<p><strong>Nginx Reverse Proxy</strong>:</p>
+<ul>
+<li>TLS termination (Let’s Encrypt)</li>
+<li>Serves static files from <code>dist/</code> (React SPA)</li>
+<li>Proxies <code>/api/*</code> to Express backend on port 3000</li>
+<li>HTTP/2 enabled for performance</li>
+</ul>
+<p><strong>Express API</strong>:</p>
+<ul>
+<li>Runs as systemd service (<code>wireguard-hub-api.service</code>)</li>
+<li>Listens on <code>127.0.0.1:3000</code></li>
+<li>Auto-restart on failure</li>
+<li>Logs to journalctl</li>
+</ul>
+<p><strong>WireGuard Interface</strong>:</p>
+<ul>
+<li>Runs as systemd service (<code>wg-quick@wg0.service</code>)</li>
+<li>Listens on <code>0.0.0.0:51820/udp</code></li>
+<li>Kernel-level packet processing</li>
+<li>Automatic peer handshake every 25 seconds (PersistentKeepalive)</li>
+</ul>
+<h3>2.3 Data Flow</h3>
+<p><strong>Dashboard Access</strong>:</p>
+<pre><code>Browser → [443/tcp HTTPS] → Nginx → Static Files (React SPA)
+Browser → [443/tcp HTTPS] → Nginx → [/api/*] → Express (3000)
+</code></pre>
+<p><strong>Spoke Installation</strong>:</p>
+<pre><code>Spoke → [443/tcp HTTPS] → Nginx → Express → Script Generator
+Spoke → [443/tcp HTTPS] → Nginx → Express → TokenService → SQLite
+Spoke → [51820/udp] → WireGuard Interface (wg0)
+</code></pre>
+<hr>
+<h2>3. Spoke Provisioning Flow</h2>
+<h3>Complete Provisioning Sequence</h3>
+<pre><code class="language-mermaid">%% Spoke Provisioning Sequence Diagram
+
+sequenceDiagram
+    participant Admin as Admin&lt;br/&gt;(Browser)
+    participant Dashboard as React&lt;br/&gt;Dashboard
+    participant API as Express&lt;br/&gt;API
+    participant DB as SQLite&lt;br/&gt;Database
+    participant WG as WireGuard&lt;br/&gt;Service
+    participant Spoke as Spoke&lt;br/&gt;Device
+
+    Admin-&gt;&gt;Dashboard: 1. Click &quot;Add Spoke&quot;&lt;br/&gt;Name: &quot;laptop-001&quot;
+    Dashboard-&gt;&gt;API: 2. POST /api/installation/token&lt;br/&gt;{spokeName: &quot;laptop-001&quot;}
+
+    API-&gt;&gt;API: 3. Generate 256-bit token&lt;br/&gt;crypto.randomBytes(32)
+    API-&gt;&gt;DB: 4. Allocate next IP&lt;br/&gt;10.0.1.5/24
+    API-&gt;&gt;DB: 5. INSERT token record&lt;br/&gt;(unused, expires 24h)
+    DB--&gt;&gt;API: Token created
+
+    API--&gt;&gt;Dashboard: 6. Return token + install cmd
+    Dashboard--&gt;&gt;Admin: 7. Show installation command&lt;br/&gt;curl https://hub/.../TOKEN | bash
+
+    Admin-&gt;&gt;Spoke: 8. SSH to spoke device&lt;br/&gt;Execute install command
+
+    Spoke-&gt;&gt;API: 9. GET /api/installation/script/TOKEN?platform=linux
+    API-&gt;&gt;DB: 10. Validate token&lt;br/&gt;(exists, unused, not expired)
+    API-&gt;&gt;DB: 11. Mark token as USED&lt;br/&gt;(atomic UPDATE)
+    DB--&gt;&gt;API: Token marked used
+    API--&gt;&gt;Spoke: 12. Return rendered script&lt;br/&gt;(with embedded config)
+
+    Spoke-&gt;&gt;Spoke: 13. Install WireGuard&lt;br/&gt;apt-get install wireguard
+    Spoke-&gt;&gt;Spoke: 14. Generate keys locally&lt;br/&gt;wg genkey | wg pubkey
+    Spoke-&gt;&gt;Spoke: 15. Private key NEVER leaves device
+
+    Spoke-&gt;&gt;API: 16. POST /api/spoke/register&lt;br/&gt;{token, publicKey, os}
+    API-&gt;&gt;DB: 17. Validate token again&lt;br/&gt;(prevent replay)
+    API-&gt;&gt;DB: 18. Check public key unique
+    API-&gt;&gt;DB: 19. INSERT spoke registration
+    DB--&gt;&gt;API: Spoke registered
+
+    API-&gt;&gt;WG: 20. wg set wg0 peer &lt;publicKey&gt;&lt;br/&gt;allowed-ips 10.0.1.5/32
+    WG--&gt;&gt;API: Peer added
+    API-&gt;&gt;WG: 21. wg-quick save wg0
+    WG--&gt;&gt;API: Config saved
+
+    API--&gt;&gt;Spoke: 22. Registration successful
+
+    Spoke-&gt;&gt;Spoke: 23. Create /etc/wireguard/wg0.conf
+    Spoke-&gt;&gt;Spoke: 24. systemctl enable wg-quick@wg0
+    Spoke-&gt;&gt;Spoke: 25. systemctl start wg-quick@wg0
+
+    Spoke-&gt;&gt;WG: 26. Establish VPN tunnel
+    WG-&gt;&gt;Spoke: 27. Handshake complete
+
+    Spoke--&gt;&gt;Admin: 28. ✅ Installation complete&lt;br/&gt;VPN IP: 10.0.1.5
+
+    Note over Admin,Spoke: Total time: ~30-60 seconds
+
+</code></pre>
+<p><strong>Figure: Spoke Provisioning Sequence</strong></p>
+<h3>3.1 Phase 1: Token Generation (Dashboard)</h3>
+<p><strong>User Action</strong>: Admin clicks “Add Spoke” and enters name “laptop-001”</p>
+<p><strong>Backend Processing</strong>:</p>
+<ol>
+<li>Generate 256-bit secure random token: <code>crypto.randomBytes(32).toString('base64url')</code></li>
+<li>Allocate next available IP from pool (e.g., 10.0.1.5/24)</li>
+<li>Create database record:<pre><code class="language-json">{
+  &quot;id&quot;: &quot;uuid-123&quot;,
+  &quot;token&quot;: &quot;abc123...xyz789&quot;,
+  &quot;spokeId&quot;: &quot;uuid-456&quot;,
+  &quot;spokeName&quot;: &quot;laptop-001&quot;,
+  &quot;allowedIPs&quot;: [&quot;10.0.1.5/24&quot;],
+  &quot;createdAt&quot;: &quot;2025-12-22T10:00:00Z&quot;,
+  &quot;expiresAt&quot;: &quot;2025-12-23T10:00:00Z&quot;,
+  &quot;used&quot;: false,
+  &quot;hubEndpoint&quot;: &quot;203.0.113.5:51820&quot;,
+  &quot;hubPublicKey&quot;: &quot;hub-public-key...&quot;,
+  &quot;networkCIDR&quot;: &quot;10.0.1.0/24&quot;
+}
+</code></pre>
+</li>
+</ol>
+<p><strong>Frontend Display</strong>:</p>
+<pre><code class="language-bash"># Installation Command (Linux)
+curl -sSL https://hub.example.com/api/installation/script/abc123...xyz789?platform=linux | sudo bash
+
+# Installation Command (Windows PowerShell - Run as Administrator)
+Invoke-WebRequest -Uri &quot;https://hub.example.com/api/installation/script/abc123...xyz789?platform=windows&quot; -UseBasicParsing | Invoke-Expression
+</code></pre>
+<h3>3.2 Phase 2: Script Execution (Spoke Device)</h3>
+<p><strong>Step 1: Script Download</strong></p>
+<ul>
+<li>Spoke device fetches script via HTTPS</li>
+<li>Backend validates token (exists, not used, not expired)</li>
+<li>Backend atomically marks token as used: <code>UPDATE installation_tokens SET used = 1, used_at = NOW() WHERE token = ? AND used = 0</code></li>
+<li>Backend returns rendered script with embedded configuration</li>
+</ul>
+<p><strong>Step 2: WireGuard Installation</strong></p>
+<ul>
+<li>Linux: <code>apt-get install wireguard</code> or <code>yum install wireguard-tools</code></li>
+<li>macOS: <code>brew install wireguard-tools</code></li>
+<li>Windows: <code>choco install wireguard</code></li>
+<li>Proxmox: <code>apt-get install wireguard</code> (Debian-based)</li>
+</ul>
+<p><strong>Step 3: Key Generation (Local)</strong></p>
+<pre><code class="language-bash">PRIVATE_KEY=$(wg genkey)
+PUBLIC_KEY=$(echo &quot;$PRIVATE_KEY&quot; | wg pubkey)
+</code></pre>
+<p><strong>Critical</strong>: Private key NEVER leaves the spoke device</p>
+<p><strong>Step 4: Spoke Registration</strong></p>
+<pre><code class="language-bash">curl -X POST https://hub.example.com/api/spoke/register \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{
+    &quot;token&quot;: &quot;abc123...xyz789&quot;,
+    &quot;publicKey&quot;: &quot;spoke-public-key...&quot;,
+    &quot;os&quot;: &quot;linux&quot;
+  }'
+</code></pre>
+<h3>3.3 Phase 3: Hub Configuration Update</h3>
+<p><strong>Backend Processing</strong>:</p>
+<ol>
+<li>Validate token (double-check not reused)</li>
+<li>Validate public key format (44 characters, base64)</li>
+<li>Check public key uniqueness (prevent impersonation)</li>
+<li>Create spoke registration record in database</li>
+<li>Add peer to WireGuard interface:<pre><code class="language-bash">wg set wg0 peer &lt;spoke-public-key&gt; allowed-ips 10.0.1.5/32 persistent-keepalive 25
+</code></pre>
+</li>
+<li>Persist configuration: <code>wg-quick save wg0</code></li>
+</ol>
+<p><strong>Success Response</strong>:</p>
+<pre><code class="language-json">{
+  &quot;success&quot;: true,
+  &quot;spokeId&quot;: &quot;uuid-456&quot;,
+  &quot;spokeName&quot;: &quot;laptop-001&quot;,
+  &quot;allowedIPs&quot;: [&quot;10.0.1.5/24&quot;],
+  &quot;status&quot;: &quot;active&quot;
+}
+</code></pre>
+<h3>3.4 Phase 4: Spoke Configuration and Connection</h3>
+<p><strong>Script Actions</strong>:</p>
+<ol>
+<li>Create <code>/etc/wireguard/wg0.conf</code>:<pre><code class="language-ini">[Interface]
+Address = 10.0.1.5/24
+PrivateKey = &lt;locally-generated-private-key&gt;
+DNS = 1.1.1.1, 8.8.8.8
+
+[Peer]
+# Hub
+PublicKey = &lt;hub-public-key&gt;
+Endpoint = 203.0.113.5:51820
+AllowedIPs = 10.0.1.0/24
+PersistentKeepalive = 25
+</code></pre>
+</li>
+<li>Set permissions: <code>chmod 600 /etc/wireguard/wg0.conf</code></li>
+<li>Enable service: <code>systemctl enable wg-quick@wg0</code></li>
+<li>Start VPN: <code>systemctl start wg-quick@wg0</code></li>
+</ol>
+<p><strong>Verification</strong>:</p>
+<pre><code class="language-bash">$ wg show wg0
+interface: wg0
+  public key: spoke-public-key...
+  private key: (hidden)
+  listening port: 51820
+
+peer: hub-public-key...
+  endpoint: 203.0.113.5:51820
+  allowed ips: 10.0.1.0/24
+  latest handshake: 1 second ago
+  transfer: 1.2 KiB received, 856 B sent
+  persistent keepalive: every 25 seconds
+</code></pre>
+<p><strong>Total Provisioning Time</strong>: 30-60 seconds</p>
+<hr>
+<h2>4. Database Design</h2>
+<h3>Entity Relationship Diagram</h3>
+<pre><code class="language-mermaid">%% Database Entity Relationship Diagram
+
+erDiagram
+    HUB_CONFIG ||--o{ INSTALLATION_TOKENS : &quot;provides config for&quot;
+    INSTALLATION_TOKENS ||--o| SPOKE_REGISTRATIONS : &quot;consumed by&quot;
+    PROXMOX_CLUSTERS ||--o{ SPOKE_REGISTRATIONS : &quot;contains&quot;
+
+    HUB_CONFIG {
+        int id PK &quot;Always 1 (singleton)&quot;
+        string interface_address &quot;10.0.1.1/24&quot;
+        int listen_port &quot;51820&quot;
+        string private_key &quot;Base64 encoded&quot;
+        string public_key &quot;Base64 encoded&quot;
+        string network_cidr &quot;10.0.1.0/24&quot;
+        json dns &quot;Optional DNS servers&quot;
+        string endpoint &quot;Public IP:port&quot;
+        datetime created_at
+        datetime updated_at
+    }
+
+    INSTALLATION_TOKENS {
+        string id PK &quot;UUID&quot;
+        string token UK &quot;32-byte base64url&quot;
+        string spoke_id UK &quot;Pre-assigned UUID&quot;
+        string spoke_name &quot;User-friendly name&quot;
+        json allowed_ips &quot;Allocated IP list&quot;
+        datetime created_at
+        datetime expires_at &quot;24 hours from created&quot;
+        boolean used &quot;0 or 1&quot;
+        datetime used_at &quot;When consumed&quot;
+        string hub_endpoint &quot;From hub_config&quot;
+        string hub_public_key &quot;From hub_config&quot;
+        string network_cidr &quot;From hub_config&quot;
+        json dns &quot;Optional&quot;
+        int persistent_keepalive &quot;Default 25&quot;
+    }
+
+    SPOKE_REGISTRATIONS {
+        string id PK &quot;Same as spoke_id from token&quot;
+        string token_id FK &quot;Links to token&quot;
+        string name &quot;Spoke name&quot;
+        string public_key UK &quot;Spoke's public key&quot;
+        json allowed_ips &quot;IP assignments&quot;
+        datetime registered_at
+        datetime last_handshake &quot;From wg show&quot;
+        string status &quot;pending/active/inactive&quot;
+        string os &quot;linux/macos/windows/proxmox&quot;
+        boolean is_proxmox &quot;True for Proxmox nodes&quot;
+        string proxmox_cluster_id FK &quot;Links to cluster&quot;
+        string proxmox_node_name &quot;pve1, pve2, etc&quot;
+        string proxmox_version &quot;Proxmox VE version&quot;
+        json metadata &quot;Extensible field&quot;
+    }
+
+    PROXMOX_CLUSTERS {
+        string id PK &quot;UUID&quot;
+        string cluster_name UK &quot;From pvecm status&quot;
+        string datacenter &quot;User metadata&quot;
+        string description &quot;User metadata&quot;
+        datetime created_at
+        datetime updated_at
+    }
+
+</code></pre>
+<p><strong>Figure: Database ERD</strong></p>
+<h3>4.1 Table: hub_config (Singleton)</h3>
+<p><strong>Purpose</strong>: Store hub WireGuard configuration</p>
+<pre><code class="language-sql">CREATE TABLE hub_config (
+  id INTEGER PRIMARY KEY CHECK (id = 1),  -- Enforce single row
+  interface_address TEXT NOT NULL,        -- 10.0.1.1/24
+  listen_port INTEGER NOT NULL,           -- 51820
+  private_key TEXT NOT NULL,              -- Base64 encoded, AES-256 encrypted at rest
+  public_key TEXT NOT NULL,               -- Base64 encoded
+  network_cidr TEXT NOT NULL,             -- 10.0.1.0/24
+  dns TEXT,                               -- JSON array: [&quot;1.1.1.1&quot;, &quot;8.8.8.8&quot;]
+  endpoint TEXT NOT NULL,                 -- 203.0.113.5:51820
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+</code></pre>
+<p><strong>Sample Data</strong>:</p>
+<pre><code class="language-json">{
+  &quot;id&quot;: 1,
+  &quot;interfaceAddress&quot;: &quot;10.0.1.1/24&quot;,
+  &quot;listenPort&quot;: 51820,
+  &quot;privateKey&quot;: &quot;oK5RN+kVJVy...&quot;,
+  &quot;publicKey&quot;: &quot;jNQCb8RA9pf...&quot;,
+  &quot;networkCIDR&quot;: &quot;10.0.1.0/24&quot;,
+  &quot;dns&quot;: [&quot;1.1.1.1&quot;, &quot;8.8.8.8&quot;],
+  &quot;endpoint&quot;: &quot;203.0.113.5:51820&quot;,
+  &quot;createdAt&quot;: &quot;2025-12-22T09:00:00Z&quot;,
+  &quot;updatedAt&quot;: &quot;2025-12-22T09:00:00Z&quot;
+}
+</code></pre>
+<h3>4.2 Table: installation_tokens</h3>
+<p><strong>Purpose</strong>: Store one-time-use installation tokens</p>
+<pre><code class="language-sql">CREATE TABLE installation_tokens (
+  id TEXT PRIMARY KEY,                    -- UUID
+  token TEXT UNIQUE NOT NULL,             -- 32-byte base64url (256-bit)
+  spoke_id TEXT UNIQUE NOT NULL,          -- Pre-assigned UUID
+  spoke_name TEXT NOT NULL,               -- User-friendly name
+  allowed_ips TEXT NOT NULL,              -- JSON array: [&quot;10.0.1.5/24&quot;]
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,               -- created_at + 24 hours
+  used INTEGER DEFAULT 0,                 -- Boolean: 0 or 1
+  used_at TEXT,                           -- Timestamp when consumed
+  hub_endpoint TEXT NOT NULL,             -- From hub_config
+  hub_public_key TEXT NOT NULL,           -- From hub_config
+  network_cidr TEXT NOT NULL,             -- From hub_config
+  dns TEXT,                               -- JSON array (optional)
+  persistent_keepalive INTEGER DEFAULT 25
+);
+
+CREATE INDEX idx_token ON installation_tokens(token);
+CREATE INDEX idx_expires_at ON installation_tokens(expires_at);
+</code></pre>
+<p><strong>Sample Data</strong>:</p>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;f47ac10b-58cc-4372-a567-0e02b2c3d479&quot;,
+  &quot;token&quot;: &quot;Kd8jD_s9fN2mP1qR6tV8wX0yZ5aB3cE7gH4iJ&quot;,
+  &quot;spokeId&quot;: &quot;a1b2c3d4-e5f6-7890-abcd-ef1234567890&quot;,
+  &quot;spokeName&quot;: &quot;laptop-001&quot;,
+  &quot;allowedIPs&quot;: [&quot;10.0.1.5/24&quot;],
+  &quot;createdAt&quot;: &quot;2025-12-22T10:00:00Z&quot;,
+  &quot;expiresAt&quot;: &quot;2025-12-23T10:00:00Z&quot;,
+  &quot;used&quot;: 0,
+  &quot;usedAt&quot;: null,
+  &quot;hubEndpoint&quot;: &quot;203.0.113.5:51820&quot;,
+  &quot;hubPublicKey&quot;: &quot;jNQCb8RA9pf...&quot;,
+  &quot;networkCIDR&quot;: &quot;10.0.1.0/24&quot;,
+  &quot;dns&quot;: [&quot;1.1.1.1&quot;, &quot;8.8.8.8&quot;],
+  &quot;persistentKeepalive&quot;: 25
+}
+</code></pre>
+<h3>4.3 Table: spoke_registrations</h3>
+<p><strong>Purpose</strong>: Store registered spokes</p>
+<pre><code class="language-sql">CREATE TABLE spoke_registrations (
+  id TEXT PRIMARY KEY,                    -- Same as spoke_id from token
+  token_id TEXT NOT NULL,                 -- Foreign key to installation_tokens
+  name TEXT NOT NULL,
+  public_key TEXT UNIQUE NOT NULL,        -- 44-char base64
+  allowed_ips TEXT NOT NULL,              -- JSON array
+  registered_at TEXT NOT NULL,
+  last_handshake TEXT,                    -- From 'wg show' output
+  status TEXT NOT NULL,                   -- pending/active/inactive
+  os TEXT NOT NULL,                       -- linux/macos/windows/proxmox
+
+  -- Proxmox-specific fields
+  is_proxmox INTEGER DEFAULT 0,           -- Boolean
+  proxmox_cluster_id TEXT,                -- Foreign key (NULL for standalone)
+  proxmox_node_name TEXT,                 -- Node name within cluster
+  proxmox_version TEXT,                   -- Proxmox VE version
+
+  metadata TEXT,                          -- JSON (extensible)
+
+  FOREIGN KEY (token_id) REFERENCES installation_tokens(id),
+  FOREIGN KEY (proxmox_cluster_id) REFERENCES proxmox_clusters(id)
+);
+
+CREATE INDEX idx_public_key ON spoke_registrations(public_key);
+CREATE INDEX idx_status ON spoke_registrations(status);
+CREATE INDEX idx_proxmox_cluster ON spoke_registrations(proxmox_cluster_id);
+</code></pre>
+<p><strong>Sample Data (Linux)</strong>:</p>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;a1b2c3d4-e5f6-7890-abcd-ef1234567890&quot;,
+  &quot;tokenId&quot;: &quot;f47ac10b-58cc-4372-a567-0e02b2c3d479&quot;,
+  &quot;name&quot;: &quot;laptop-001&quot;,
+  &quot;publicKey&quot;: &quot;xT0m9aV3bR5eD8fG1hJ4kL6nP9qS2uX7yZ0cE4iO=&quot;,
+  &quot;allowedIPs&quot;: [&quot;10.0.1.5/24&quot;],
+  &quot;registeredAt&quot;: &quot;2025-12-22T10:05:00Z&quot;,
+  &quot;lastHandshake&quot;: &quot;2025-12-22T10:10:00Z&quot;,
+  &quot;status&quot;: &quot;active&quot;,
+  &quot;os&quot;: &quot;linux&quot;,
+  &quot;isProxmox&quot;: false,
+  &quot;metadata&quot;: {
+    &quot;wireguardVersion&quot;: &quot;1.0.20210914&quot;,
+    &quot;kernelVersion&quot;: &quot;5.15.0-91-generic&quot;
+  }
+}
+</code></pre>
+<p><strong>Sample Data (Proxmox)</strong>:</p>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;b2c3d4e5-f6a7-8901-bcde-f12345678901&quot;,
+  &quot;tokenId&quot;: &quot;e47ac10b-58cc-4372-a567-0e02b2c3d480&quot;,
+  &quot;name&quot;: &quot;pve1.dc1&quot;,
+  &quot;publicKey&quot;: &quot;yU1n0bW4cS6fE9gH2iK5lM7oQ0rT3vY8zA1dF5jP=&quot;,
+  &quot;allowedIPs&quot;: [&quot;10.0.1.10/24&quot;],
+  &quot;registeredAt&quot;: &quot;2025-12-22T11:00:00Z&quot;,
+  &quot;lastHandshake&quot;: &quot;2025-12-22T11:05:00Z&quot;,
+  &quot;status&quot;: &quot;active&quot;,
+  &quot;os&quot;: &quot;proxmox&quot;,
+  &quot;isProxmox&quot;: true,
+  &quot;proxmoxClusterId&quot;: &quot;c3d4e5f6-a7b8-9012-cdef-123456789012&quot;,
+  &quot;proxmoxNodeName&quot;: &quot;pve1&quot;,
+  &quot;proxmoxVersion&quot;: &quot;8.1.3&quot;,
+  &quot;metadata&quot;: {
+    &quot;clusterName&quot;: &quot;datacenter1-prod&quot;,
+    &quot;clusterNodes&quot;: &quot;pve1,pve2,pve3&quot;,
+    &quot;isClustered&quot;: true
+  }
+}
+</code></pre>
+<h3>4.4 Table: proxmox_clusters</h3>
+<p><strong>Purpose</strong>: Organize Proxmox nodes by cluster</p>
+<pre><code class="language-sql">CREATE TABLE proxmox_clusters (
+  id TEXT PRIMARY KEY,                    -- UUID
+  cluster_name TEXT UNIQUE NOT NULL,      -- From 'pvecm status'
+  datacenter TEXT,                        -- User-defined metadata
+  description TEXT,                       -- User-defined metadata
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_cluster_name ON proxmox_clusters(cluster_name);
+</code></pre>
+<p><strong>Sample Data</strong>:</p>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;c3d4e5f6-a7b8-9012-cdef-123456789012&quot;,
+  &quot;clusterName&quot;: &quot;datacenter1-prod&quot;,
+  &quot;datacenter&quot;: &quot;US-East-1&quot;,
+  &quot;description&quot;: &quot;Production cluster for primary workloads&quot;,
+  &quot;createdAt&quot;: &quot;2025-12-22T11:00:00Z&quot;,
+  &quot;updatedAt&quot;: &quot;2025-12-22T11:00:00Z&quot;
+}
+</code></pre>
+<h3>4.5 Database Relationships</h3>
+<p><strong>1:1 Relationship</strong>:</p>
+<ul>
+<li><code>installation_tokens.spoke_id</code> → <code>spoke_registrations.id</code> (one token creates one spoke)</li>
+</ul>
+<p><strong>1:N Relationships</strong>:</p>
+<ul>
+<li><code>proxmox_clusters.id</code> → <code>spoke_registrations.proxmox_cluster_id</code> (one cluster has many nodes)</li>
+</ul>
+<p><strong>Cascade Behavior</strong>:</p>
+<ul>
+<li>Deleting a spoke does NOT delete the token (audit trail preserved)</li>
+<li>Deleting a cluster requires all nodes to be removed first (or nullifies foreign key)</li>
+</ul>
+<hr>
+<h2>5. Security Model</h2>
+<h3>Security Architecture Diagram</h3>
+<pre><code class="language-mermaid">%% Security Model &amp; Threat Mitigation
+
+graph TB
+    subgraph &quot;Threat Actors&quot;
+        T1[External Attacker&lt;br/&gt;Internet-based]
+        T2[Malicious Insider&lt;br/&gt;Stolen Token]
+        T3[MITM Attacker&lt;br/&gt;Network Intercept]
+    end
+
+    subgraph &quot;Attack Vectors&quot;
+        A1[Token Theft]
+        A2[Token Brute Force]
+        A3[Token Replay]
+        A4[Hub Key Compromise]
+        A5[Spoke Impersonation]
+        A6[Script Tampering]
+    end
+
+    subgraph &quot;Security Controls&quot;
+        C1[HTTPS/TLS 1.3&lt;br/&gt;Transport Encryption]
+        C2[256-bit Token Entropy&lt;br/&gt;2^256 combinations]
+        C3[24-hour Expiration&lt;br/&gt;Limited Time Window]
+        C4[Atomic DB Update&lt;br/&gt;One-time Use Enforcement]
+        C5[Hub Key Encryption&lt;br/&gt;AES-256 at Rest]
+        C6[Public Key Uniqueness&lt;br/&gt;DB Constraint]
+        C7[Code Signing&lt;br/&gt;Script Integrity]
+        C8[Rate Limiting&lt;br/&gt;10 tokens/hour/IP]
+        C9[CORS Policy&lt;br/&gt;Origin Restriction]
+        C10[Zero-Trust Keys&lt;br/&gt;Generated on Spoke]
+    end
+
+    subgraph &quot;Assets Protected&quot;
+        AS1[Hub Private Key&lt;br/&gt;CRITICAL]
+        AS2[Installation Tokens&lt;br/&gt;LIMITED SCOPE]
+        AS3[Spoke Private Keys&lt;br/&gt;LOCAL ONLY]
+        AS4[Network Topology&lt;br/&gt;DATABASE]
+    end
+
+    T1 --&gt; A1
+    T1 --&gt; A2
+    T1 --&gt; A6
+    T2 --&gt; A1
+    T2 --&gt; A3
+    T3 --&gt; A1
+    T3 --&gt; A6
+
+    A1 --&gt;|Mitigated by| C1
+    A1 --&gt;|Mitigated by| C3
+    A2 --&gt;|Mitigated by| C2
+    A2 --&gt;|Mitigated by| C8
+    A3 --&gt;|Mitigated by| C4
+    A4 --&gt;|Mitigated by| C5
+    A5 --&gt;|Mitigated by| C6
+    A6 --&gt;|Mitigated by| C7
+
+    C1 --&gt; AS2
+    C2 --&gt; AS2
+    C3 --&gt; AS2
+    C4 --&gt; AS2
+    C5 --&gt; AS1
+    C6 --&gt; AS3
+    C7 --&gt; AS2
+    C8 --&gt; AS2
+    C9 --&gt; AS4
+    C10 --&gt; AS3
+
+    style T1 fill:#f44336,color:#fff
+    style T2 fill:#ff9800,color:#fff
+    style T3 fill:#ff5722,color:#fff
+    style C1 fill:#4caf50,color:#fff
+    style C2 fill:#4caf50,color:#fff
+    style C3 fill:#4caf50,color:#fff
+    style C4 fill:#4caf50,color:#fff
+    style C5 fill:#2196f3,color:#fff
+    style C6 fill:#4caf50,color:#fff
+    style C10 fill:#2196f3,color:#fff
+    style AS1 fill:#d32f2f,color:#fff
+    style AS2 fill:#ffa726,color:#fff
+    style AS3 fill:#66bb6a,color:#fff
+
+</code></pre>
+<p><strong>Figure: Security Model</strong></p>
+<h3>5.1 Threat Model</h3>
+<p><strong>Threat Actors</strong>:</p>
+<ol>
+<li><strong>External Attacker</strong>: Internet-based adversary attempting unauthorized access</li>
+<li><strong>Malicious Insider</strong>: User with stolen installation token</li>
+<li><strong>MITM Attacker</strong>: Network-level adversary intercepting traffic</li>
+</ol>
+<p><strong>Attack Vectors</strong>:</p>
+<ol>
+<li><strong>Token Theft</strong>: Stolen installation token used for unauthorized spoke registration</li>
+<li><strong>Token Brute Force</strong>: Attempting to guess valid tokens</li>
+<li><strong>Token Replay</strong>: Reusing previously used token</li>
+<li><strong>Hub Key Compromise</strong>: Theft of hub private key</li>
+<li><strong>Spoke Impersonation</strong>: Registering with duplicate public key</li>
+<li><strong>Script Tampering</strong>: Modified installation script with malicious payload</li>
+</ol>
+<h3>5.2 Security Controls</h3>
+<h4>C1: HTTPS/TLS 1.3 Transport Encryption</h4>
+<ul>
+<li><strong>Mitigation</strong>: Token Theft, Script Tampering</li>
+<li><strong>Implementation</strong>: Let’s Encrypt certificates, Nginx TLS termination</li>
+<li><strong>Cipher Suites</strong>: TLS 1.3 only, forward secrecy enabled</li>
+<li><strong>HSTS</strong>: <code>Strict-Transport-Security: max-age=31536000; includeSubDomains</code></li>
+</ul>
+<h4>C2: 256-bit Token Entropy</h4>
+<ul>
+<li><strong>Mitigation</strong>: Token Brute Force</li>
+<li><strong>Implementation</strong>: <code>crypto.randomBytes(32)</code> → 2^256 combinations</li>
+<li><strong>Guessing Difficulty</strong>: ~10^77 attempts needed (impossible with current technology)</li>
+</ul>
+<h4>C3: 24-hour Token Expiration</h4>
+<ul>
+<li><strong>Mitigation</strong>: Token Theft (limited time window)</li>
+<li><strong>Implementation</strong>: Database check on <code>expires_at</code> field</li>
+<li><strong>Cleanup</strong>: Cron job removes expired tokens daily</li>
+</ul>
+<h4>C4: Atomic Database Update (One-Time Use)</h4>
+<ul>
+<li><strong>Mitigation</strong>: Token Replay</li>
+<li><strong>Implementation</strong>:<pre><code class="language-sql">UPDATE installation_tokens
+SET used = 1, used_at = NOW()
+WHERE token = ? AND used = 0
+</code></pre>
+</li>
+<li><strong>Race Condition Protection</strong>: If <code>result.changes = 0</code>, token already used</li>
+</ul>
+<h4>C5: Hub Key Encryption at Rest</h4>
+<ul>
+<li><strong>Mitigation</strong>: Hub Key Compromise</li>
+<li><strong>Implementation</strong>: AES-256 encryption of private key in database</li>
+<li><strong>Key Management</strong>: Encryption key stored in environment variable (not in database)</li>
+<li><strong>Backup</strong>: GPG-encrypted backups of hub keys</li>
+</ul>
+<h4>C6: Public Key Uniqueness Constraint</h4>
+<ul>
+<li><strong>Mitigation</strong>: Spoke Impersonation</li>
+<li><strong>Implementation</strong>: <code>UNIQUE</code> constraint on <code>spoke_registrations.public_key</code></li>
+<li><strong>Database Enforcement</strong>: Prevents duplicate public keys</li>
+</ul>
+<h4>C7: Code Signing (Future Enhancement)</h4>
+<ul>
+<li><strong>Mitigation</strong>: Script Tampering</li>
+<li><strong>Implementation</strong>: Sign installation scripts with GPG key</li>
+<li><strong>Verification</strong>: Scripts validate signature before execution</li>
+</ul>
+<h4>C8: Rate Limiting</h4>
+<ul>
+<li><strong>Mitigation</strong>: Token Brute Force, DoS</li>
+<li><strong>Implementation</strong>: Max 10 token generations per hour per IP</li>
+<li><strong>Library</strong>: express-rate-limit middleware</li>
+</ul>
+<h4>C9: CORS Policy</h4>
+<ul>
+<li><strong>Mitigation</strong>: Unauthorized API access from malicious websites</li>
+<li><strong>Implementation</strong>: Restrict origins to <code>https://hub.example.com</code></li>
+</ul>
+<h4>C10: Zero-Trust Key Generation</h4>
+<ul>
+<li><strong>Mitigation</strong>: Hub Key Compromise impact</li>
+<li><strong>Implementation</strong>: Spoke private keys generated locally, never transmitted</li>
+<li><strong>Benefit</strong>: Hub compromise does NOT expose spoke private keys</li>
+</ul>
+<h3>5.3 Assets and Protection Levels</h3>
+<table>
+<thead>
+<tr>
+<th>Asset</th>
+<th>Criticality</th>
+<th>Protection</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hub Private Key</td>
+<td><strong>CRITICAL</strong></td>
+<td>AES-256 encryption, GPG backups, restricted file permissions (600)</td>
+</tr>
+<tr>
+<td>Installation Tokens</td>
+<td><strong>LIMITED SCOPE</strong></td>
+<td>HTTPS transport, 24h expiration, one-time use</td>
+</tr>
+<tr>
+<td>Spoke Private Keys</td>
+<td><strong>LOCAL ONLY</strong></td>
+<td>Never leave spoke device, stored in /etc/wireguard/ (600 permissions)</td>
+</tr>
+<tr>
+<td>Network Topology</td>
+<td><strong>DATABASE</strong></td>
+<td>Database-level access control, encrypted backups</td>
+</tr>
+</tbody>
+</table>
+<h3>5.4 Security Assumptions</h3>
+<p><strong>Trusted Components</strong>:</p>
+<ul>
+<li>Hub server is physically secure</li>
+<li>Hub server OS is hardened and patched</li>
+<li>Database file permissions are properly configured</li>
+<li>Admin users accessing dashboard are authenticated (future: add auth)</li>
+</ul>
+<p><strong>Attack Surface Reduction</strong>:</p>
+<ul>
+<li>No SSH access required from spokes to hub</li>
+<li>No database ports exposed to internet</li>
+<li>Only ports 443/tcp and 51820/udp open</li>
+<li>WireGuard protocol cryptographically secure (ChaCha20, Poly1305, Curve25519)</li>
+</ul>
+<h3>5.5 Audit Trail</h3>
+<p><strong>Token Lifecycle Logging</strong>:</p>
+<pre><code>Event: Token Created
+  - Token ID: uuid-123
+  - Spoke Name: laptop-001
+  - IP Allocated: 10.0.1.5
+  - Timestamp: 2025-12-22T10:00:00Z
+
+Event: Token Used
+  - Token ID: uuid-123
+  - Source IP: 192.0.2.50
+  - User Agent: curl/7.68.0
+  - Timestamp: 2025-12-22T10:05:00Z
+
+Event: Spoke Registered
+  - Spoke ID: uuid-456
+  - Public Key: xT0m9aV3bR5eD8fG1hJ4kL6nP9qS2uX7yZ0cE4iO=
+  - OS: linux
+  - Timestamp: 2025-12-22T10:05:30Z
+</code></pre>
+<p><strong>Database Audit</strong>:</p>
+<ul>
+<li>All token and spoke records are immutable (no UPDATE/DELETE, only INSERT)</li>
+<li>Token <code>used</code> flag and <code>used_at</code> timestamp provide audit trail</li>
+<li>Spoke registration records preserve full token lifecycle</li>
+</ul>
+<hr>
+<h2>6. Proxmox Multi-Cluster Architecture</h2>
+<h3>Proxmox Cluster Topology Diagram</h3>
+<pre><code class="language-mermaid">%% Proxmox Multi-Cluster Architecture
+
+graph TB
+    subgraph &quot;Hub (Central)&quot;
+        HUB[WireGuard Hub&lt;br/&gt;10.0.1.1&lt;br/&gt;203.0.113.5:51820]
+        DB[(Database&lt;br/&gt;Cluster Registry)]
+    end
+
+    subgraph &quot;Datacenter 1: Production&quot;
+        subgraph &quot;Cluster: dc1-prod&quot;
+            PVE1[pve1.dc1&lt;br/&gt;10.0.1.10&lt;br/&gt;Proxmox Node]
+            PVE2[pve2.dc1&lt;br/&gt;10.0.1.11&lt;br/&gt;Proxmox Node]
+            PVE3[pve3.dc1&lt;br/&gt;10.0.1.12&lt;br/&gt;Proxmox Node]
+            CEPH1[Ceph Storage&lt;br/&gt;Shared across cluster]
+        end
+        PVE1 &amp; PVE2 &amp; PVE3 -.-&gt;|Cluster Traffic| CEPH1
+        PVE1 &lt;--&gt;|Corosync| PVE2
+        PVE2 &lt;--&gt;|Corosync| PVE3
+        PVE3 &lt;--&gt;|Corosync| PVE1
+    end
+
+    subgraph &quot;Datacenter 2: Backup&quot;
+        subgraph &quot;Cluster: dc2-backup&quot;
+            PVE4[pve1.dc2&lt;br/&gt;10.0.1.20&lt;br/&gt;Proxmox Node]
+            PVE5[pve2.dc2&lt;br/&gt;10.0.1.21&lt;br/&gt;Proxmox Node]
+            NFS[NFS Storage]
+        end
+        PVE4 &amp; PVE5 -.-&gt;|Storage| NFS
+        PVE4 &lt;--&gt;|Corosync| PVE5
+    end
+
+    subgraph &quot;Edge Site&quot;
+        subgraph &quot;Cluster: edge-site1&quot;
+            PVE6[pve1.edge&lt;br/&gt;10.0.1.30&lt;br/&gt;Proxmox Node]
+            PVE7[pve2.edge&lt;br/&gt;10.0.1.31&lt;br/&gt;Proxmox Node]
+        end
+        PVE6 &lt;--&gt;|Corosync| PVE7
+    end
+
+    subgraph &quot;Standalone Nodes&quot;
+        PVE8[pve-standalone&lt;br/&gt;10.0.1.50&lt;br/&gt;No Cluster]
+    end
+
+    HUB -.-&gt;|WireGuard VPN| PVE1
+    HUB -.-&gt;|WireGuard VPN| PVE2
+    HUB -.-&gt;|WireGuard VPN| PVE3
+    HUB -.-&gt;|WireGuard VPN| PVE4
+    HUB -.-&gt;|WireGuard VPN| PVE5
+    HUB -.-&gt;|WireGuard VPN| PVE6
+    HUB -.-&gt;|WireGuard VPN| PVE7
+    HUB -.-&gt;|WireGuard VPN| PVE8
+
+    HUB --&gt; DB
+
+    Note1[Each node detects cluster&lt;br/&gt;membership via pvecm status]
+    Note2[All nodes register individually&lt;br/&gt;with unique IP &amp; keys]
+    Note3[Dashboard groups nodes&lt;br/&gt;by cluster for visibility]
+
+    style HUB fill:#f44336,color:#fff
+    style PVE1 fill:#4caf50,color:#fff
+    style PVE2 fill:#4caf50,color:#fff
+    style PVE3 fill:#4caf50,color:#fff
+    style PVE4 fill:#2196f3,color:#fff
+    style PVE5 fill:#2196f3,color:#fff
+    style PVE6 fill:#ff9800,color:#fff
+    style PVE7 fill:#ff9800,color:#fff
+    style PVE8 fill:#9e9e9e,color:#fff
+    style DB fill:#e0e0e0
+
+</code></pre>
+<p><strong>Figure: Proxmox Cluster Architecture</strong></p>
+<h3>6.1 Design Philosophy</h3>
+<p><strong>Key Principle</strong>: Each Proxmox node is an individual spoke</p>
+<p><strong>Rationale</strong>:</p>
+<ul>
+<li>Independent connectivity (cluster remains functional if one node’s VPN fails)</li>
+<li>Unique IP addressing per node (enables node-specific routing)</li>
+<li>Simplified troubleshooting (identify issues per node)</li>
+<li>Flexible cluster membership (nodes can join/leave without affecting others)</li>
+</ul>
+<h3>6.2 Deployment Scenarios</h3>
+<h4>Scenario 1: Three-Node Production Cluster</h4>
+<p><strong>Setup</strong>:</p>
+<pre><code>Cluster: datacenter1-prod
+├─ pve1.dc1 (10.0.1.10) - Node 1
+├─ pve2.dc1 (10.0.1.11) - Node 2
+└─ pve3.dc1 (10.0.1.12) - Node 3
+
+Corosync: Internal network (192.168.1.0/24)
+Storage: Ceph shared across all nodes
+VPN: Each node connects to hub individually
+</code></pre>
+<p><strong>Installation Process</strong>:</p>
+<ol>
+<li>Generate token for “pve1.dc1” → Run installation script on pve1</li>
+<li>Generate token for “pve2.dc1” → Run installation script on pve2</li>
+<li>Generate token for “pve3.dc1” → Run installation script on pve3</li>
+<li>Dashboard automatically groups nodes by cluster name “datacenter1-prod”</li>
+</ol>
+<p><strong>Network Configuration</strong>:</p>
+<ul>
+<li>Corosync traffic: Internal network (NOT through VPN)</li>
+<li>VM migration: Can use VPN (requires testing for performance)</li>
+<li>Ceph traffic: Internal network (NOT through VPN)</li>
+<li>Management access: Through VPN (ssh, web UI)</li>
+</ul>
+<h4>Scenario 2: Multi-Datacenter Deployment</h4>
+<p><strong>Setup</strong>:</p>
+<pre><code>Datacenter 1 (US-East):
+  Cluster: dc1-prod
+  ├─ pve1.dc1 (10.0.1.10)
+  ├─ pve2.dc1 (10.0.1.11)
+  └─ pve3.dc1 (10.0.1.12)
+
+Datacenter 2 (US-West):
+  Cluster: dc2-backup
+  ├─ pve1.dc2 (10.0.1.20)
+  └─ pve2.dc2 (10.0.1.21)
+
+Edge Site:
+  Cluster: edge-site1
+  ├─ pve1.edge (10.0.1.30)
+  └─ pve2.edge (10.0.1.31)
+
+Standalone:
+  pve-standalone (10.0.1.50)
+</code></pre>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li>Centralized management of all Proxmox nodes via VPN</li>
+<li>Disaster recovery (backup VMs to remote datacenter)</li>
+<li>Edge computing (manage remote sites from central hub)</li>
+<li>Hybrid deployments (mix clustered and standalone nodes)</li>
+</ul>
+<h3>6.3 Proxmox Installation Script</h3>
+<p><strong>Special Detections</strong>:</p>
+<ol>
+<li><strong>Environment Check</strong>: <code>pveversion</code> command exists</li>
+<li><strong>Cluster Detection</strong>: Parse <code>pvecm status</code> output</li>
+<li><strong>Node Name</strong>: <code>hostname</code> command</li>
+<li><strong>Cluster Members</strong>: <code>pvecm nodes</code> output</li>
+</ol>
+<p><strong>Script Logic</strong>:</p>
+<pre><code class="language-bash"># Detect Proxmox environment
+if ! command -v pveversion &amp;&gt; /dev/null; then
+  echo &quot;Error: Not a Proxmox VE system&quot;
+  exit 1
+fi
+
+PVE_VERSION=$(pveversion | head -n1 | awk '{print $2}')
+
+# Detect cluster membership
+CLUSTER_STATUS=$(pvecm status 2&gt;/dev/null || echo &quot;not_clustered&quot;)
+
+if echo &quot;$CLUSTER_STATUS&quot; | grep -q &quot;Cluster information&quot;; then
+  IS_CLUSTERED=true
+  CLUSTER_NAME=$(echo &quot;$CLUSTER_STATUS&quot; | grep &quot;Name:&quot; | awk '{print $2}')
+  NODE_NAME=$(hostname)
+  CLUSTER_NODES=$(pvecm nodes | grep -v &quot;^Node&quot; | awk '{print $3}' | tr '\n' ',' | sed 's/,$//')
+else
+  IS_CLUSTERED=false
+  NODE_NAME=$(hostname)
+fi
+
+# Register with hub, including Proxmox metadata
+curl -X POST &quot;$CALLBACK_URL&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &quot;{
+    \&quot;token\&quot;: \&quot;$TOKEN\&quot;,
+    \&quot;publicKey\&quot;: \&quot;$PUBLIC_KEY\&quot;,
+    \&quot;os\&quot;: \&quot;proxmox\&quot;,
+    \&quot;isProxmox\&quot;: true,
+    \&quot;proxmoxNodeName\&quot;: \&quot;$NODE_NAME\&quot;,
+    \&quot;proxmoxClusterName\&quot;: \&quot;$CLUSTER_NAME\&quot;,
+    \&quot;proxmoxVersion\&quot;: \&quot;$PVE_VERSION\&quot;,
+    \&quot;metadata\&quot;: {
+      \&quot;isClustered\&quot;: $IS_CLUSTERED,
+      \&quot;clusterNodes\&quot;: \&quot;$CLUSTER_NODES\&quot;
+    }
+  }&quot;
+</code></pre>
+<h3>6.4 Backend Handling</h3>
+<p><strong>SpokeController.registerSpoke()</strong>:</p>
+<pre><code class="language-typescript">if (isProxmox &amp;&amp; proxmoxClusterName) {
+  // Check if cluster exists
+  let cluster = db.prepare('SELECT * FROM proxmox_clusters WHERE cluster_name = ?')
+    .get(proxmoxClusterName)
+
+  // Create cluster if not exists
+  if (!cluster) {
+    const clusterId = uuidv4()
+    db.prepare(`
+      INSERT INTO proxmox_clusters (id, cluster_name, datacenter, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(clusterId, proxmoxClusterName, null, new Date().toISOString(), new Date().toISOString())
+
+    cluster = { id: clusterId, cluster_name: proxmoxClusterName }
+  }
+
+  // Associate spoke with cluster
+  registration.proxmoxClusterId = cluster.id
+  registration.proxmoxNodeName = proxmoxNodeName
+}
+</code></pre>
+<h3>6.5 Dashboard Visualization</h3>
+<p><strong>Hierarchical View</strong>:</p>
+<pre><code>🏢 Cluster: datacenter1-prod (3 nodes) [All Active ✓]
+  ├─ 🖥️ pve1.dc1 | 10.0.1.10 | ✅ Active (2 min ago)
+  ├─ 🖥️ pve2.dc1 | 10.0.1.11 | ✅ Active (1 min ago)
+  └─ 🖥️ pve3.dc1 | 10.0.1.12 | ✅ Active (3 min ago)
+
+🏢 Cluster: datacenter2-backup (2 nodes) [Degraded ⚠️]
+  ├─ 🖥️ pve1.dc2 | 10.0.1.20 | ✅ Active (1 min ago)
+  └─ 🖥️ pve2.dc2 | 10.0.1.21 | ❌ Inactive (15 min ago)
+
+💻 Standalone Proxmox Hosts
+  └─ 🖥️ pve-standalone | 10.0.1.50 | ✅ Active (1 min ago)
+</code></pre>
+<p><strong>Cluster Status Indicators</strong>:</p>
+<ul>
+<li><strong>All Active</strong>: All nodes have handshake within last 3 minutes</li>
+<li><strong>Degraded</strong>: Some nodes inactive (handshake &gt; 5 minutes)</li>
+<li><strong>Critical</strong>: Majority of nodes offline</li>
+</ul>
+<hr>
+<h2>7. API Specification</h2>
+<h3>7.1 Hub Management Endpoints</h3>
+<h4>POST /api/hub/initialize</h4>
+<p><strong>Purpose</strong>: First-run hub setup (generates keys, creates WireGuard interface)</p>
+<p><strong>Request Body</strong>:</p>
+<pre><code class="language-json">{
+  &quot;networkCIDR&quot;: &quot;10.0.1.0/24&quot;,
+  &quot;listenPort&quot;: 51820,
+  &quot;endpoint&quot;: &quot;203.0.113.5:51820&quot;,
+  &quot;dns&quot;: [&quot;1.1.1.1&quot;, &quot;8.8.8.8&quot;]
+}
+</code></pre>
+<p><strong>Response</strong> (201 Created):</p>
+<pre><code class="language-json">{
+  &quot;success&quot;: true,
+  &quot;hubConfig&quot;: {
+    &quot;id&quot;: 1,
+    &quot;interfaceAddress&quot;: &quot;10.0.1.1/24&quot;,
+    &quot;listenPort&quot;: 51820,
+    &quot;publicKey&quot;: &quot;jNQCb8RA9pf...&quot;,
+    &quot;networkCIDR&quot;: &quot;10.0.1.0/24&quot;,
+    &quot;dns&quot;: [&quot;1.1.1.1&quot;, &quot;8.8.8.8&quot;],
+    &quot;endpoint&quot;: &quot;203.0.113.5:51820&quot;,
+    &quot;createdAt&quot;: &quot;2025-12-22T09:00:00Z&quot;
+  }
+}
+</code></pre>
+<p><strong>Errors</strong>:</p>
+<ul>
+<li>409 Conflict: Hub already initialized</li>
+</ul>
+<h4>GET /api/hub/config</h4>
+<p><strong>Purpose</strong>: Retrieve current hub configuration</p>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-json">{
+  &quot;id&quot;: 1,
+  &quot;interfaceAddress&quot;: &quot;10.0.1.1/24&quot;,
+  &quot;listenPort&quot;: 51820,
+  &quot;publicKey&quot;: &quot;jNQCb8RA9pf...&quot;,
+  &quot;networkCIDR&quot;: &quot;10.0.1.0/24&quot;,
+  &quot;dns&quot;: [&quot;1.1.1.1&quot;, &quot;8.8.8.8&quot;],
+  &quot;endpoint&quot;: &quot;203.0.113.5:51820&quot;,
+  &quot;createdAt&quot;: &quot;2025-12-22T09:00:00Z&quot;,
+  &quot;updatedAt&quot;: &quot;2025-12-22T09:00:00Z&quot;
+}
+</code></pre>
+<p><strong>Note</strong>: Private key is NEVER returned in API responses</p>
+<h4>PUT /api/hub/config</h4>
+<p><strong>Purpose</strong>: Update hub settings (endpoint, DNS, etc.)</p>
+<p><strong>Request Body</strong>:</p>
+<pre><code class="language-json">{
+  &quot;endpoint&quot;: &quot;new-hub.example.com:51820&quot;,
+  &quot;dns&quot;: [&quot;9.9.9.9&quot;]
+}
+</code></pre>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-json">{
+  &quot;success&quot;: true,
+  &quot;hubConfig&quot;: { /* updated config */ }
+}
+</code></pre>
+<h4>GET /api/hub/status</h4>
+<p><strong>Purpose</strong>: Get WireGuard interface status</p>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-json">{
+  &quot;interface&quot;: &quot;wg0&quot;,
+  &quot;publicKey&quot;: &quot;jNQCb8RA9pf...&quot;,
+  &quot;listenPort&quot;: 51820,
+  &quot;peerCount&quot;: 15,
+  &quot;peers&quot;: [
+    {
+      &quot;publicKey&quot;: &quot;xT0m9aV3bR5eD8fG1hJ4kL6nP9qS2uX7yZ0cE4iO=&quot;,
+      &quot;endpoint&quot;: &quot;192.0.2.50:51820&quot;,
+      &quot;allowedIPs&quot;: [&quot;10.0.1.5/32&quot;],
+      &quot;latestHandshake&quot;: &quot;2025-12-22T10:10:00Z&quot;,
+      &quot;transferRx&quot;: 1234567,
+      &quot;transferTx&quot;: 987654,
+      &quot;persistentKeepalive&quot;: 25
+    }
+  ]
+}
+</code></pre>
+<h3>7.2 Installation Token Endpoints</h3>
+<h4>POST /api/installation/token</h4>
+<p><strong>Purpose</strong>: Generate new installation token</p>
+<p><strong>Request Body</strong>:</p>
+<pre><code class="language-json">{
+  &quot;spokeName&quot;: &quot;laptop-001&quot;,
+  &quot;customIP&quot;: &quot;10.0.1.100/24&quot;  // Optional
+}
+</code></pre>
+<p><strong>Response</strong> (201 Created):</p>
+<pre><code class="language-json">{
+  &quot;success&quot;: true,
+  &quot;token&quot;: {
+    &quot;id&quot;: &quot;f47ac10b-58cc-4372-a567-0e02b2c3d479&quot;,
+    &quot;token&quot;: &quot;Kd8jD_s9fN2mP1qR6tV8wX0yZ5aB3cE7gH4iJ&quot;,
+    &quot;spokeId&quot;: &quot;a1b2c3d4-e5f6-7890-abcd-ef1234567890&quot;,
+    &quot;spokeName&quot;: &quot;laptop-001&quot;,
+    &quot;allowedIPs&quot;: [&quot;10.0.1.5/24&quot;],
+    &quot;createdAt&quot;: &quot;2025-12-22T10:00:00Z&quot;,
+    &quot;expiresAt&quot;: &quot;2025-12-23T10:00:00Z&quot;,
+    &quot;used&quot;: false
+  },
+  &quot;installCommands&quot;: {
+    &quot;linux&quot;: &quot;curl -sSL https://hub.example.com/api/installation/script/Kd8jD_s9fN2mP1qR6tV8wX0yZ5aB3cE7gH4iJ?platform=linux | sudo bash&quot;,
+    &quot;macos&quot;: &quot;curl -sSL https://hub.example.com/api/installation/script/Kd8jD_s9fN2mP1qR6tV8wX0yZ5aB3cE7gH4iJ?platform=macos | sudo bash&quot;,
+    &quot;windows&quot;: &quot;Invoke-WebRequest -Uri 'https://hub.example.com/api/installation/script/Kd8jD_s9fN2mP1qR6tV8wX0yZ5aB3cE7gH4iJ?platform=windows' -UseBasicParsing | Invoke-Expression&quot;,
+    &quot;proxmox&quot;: &quot;curl -sSL https://hub.example.com/api/installation/script/Kd8jD_s9fN2mP1qR6tV8wX0yZ5aB3cE7gH4iJ?platform=proxmox | bash&quot;
+  }
+}
+</code></pre>
+<p><strong>Errors</strong>:</p>
+<ul>
+<li>409 Conflict: Custom IP already allocated</li>
+<li>400 Bad Request: Invalid IP address format</li>
+<li>503 Service Unavailable: No available IPs in pool</li>
+</ul>
+<h4>GET /api/installation/tokens</h4>
+<p><strong>Purpose</strong>: List all tokens (used and unused)</p>
+<p><strong>Query Parameters</strong>:</p>
+<ul>
+<li><code>status</code> (optional): “unused” | “used” | “expired”</li>
+</ul>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-json">{
+  &quot;tokens&quot;: [
+    {
+      &quot;id&quot;: &quot;f47ac10b-58cc-4372-a567-0e02b2c3d479&quot;,
+      &quot;spokeName&quot;: &quot;laptop-001&quot;,
+      &quot;allowedIPs&quot;: [&quot;10.0.1.5/24&quot;],
+      &quot;createdAt&quot;: &quot;2025-12-22T10:00:00Z&quot;,
+      &quot;expiresAt&quot;: &quot;2025-12-23T10:00:00Z&quot;,
+      &quot;used&quot;: true,
+      &quot;usedAt&quot;: &quot;2025-12-22T10:05:00Z&quot;
+    }
+  ],
+  &quot;totalCount&quot;: 25,
+  &quot;unusedCount&quot;: 5,
+  &quot;usedCount&quot;: 18,
+  &quot;expiredCount&quot;: 2
+}
+</code></pre>
+<h4>DELETE /api/installation/token/:id</h4>
+<p><strong>Purpose</strong>: Revoke unused token</p>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-json">{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Token revoked successfully&quot;
+}
+</code></pre>
+<p><strong>Errors</strong>:</p>
+<ul>
+<li>400 Bad Request: Token already used (cannot revoke)</li>
+<li>404 Not Found: Token does not exist</li>
+</ul>
+<h3>7.3 Script Serving Endpoint</h3>
+<h4>GET /api/installation/script/:token</h4>
+<p><strong>Purpose</strong>: Serve platform-specific installation script</p>
+<p><strong>Query Parameters</strong>:</p>
+<ul>
+<li><code>platform</code> (required): “linux” | “macos” | “windows” | “proxmox”</li>
+</ul>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-bash">#!/bin/bash
+set -e
+
+# Embedded configuration (replaced by backend)
+TOKEN=&quot;Kd8jD_s9fN2mP1qR6tV8wX0yZ5aB3cE7gH4iJ&quot;
+HUB_ENDPOINT=&quot;203.0.113.5:51820&quot;
+HUB_PUBLIC_KEY=&quot;jNQCb8RA9pf...&quot;
+SPOKE_IP=&quot;10.0.1.5/24&quot;
+NETWORK_CIDR=&quot;10.0.1.0/24&quot;
+DNS_SERVERS=&quot;1.1.1.1, 8.8.8.8&quot;
+CALLBACK_URL=&quot;https://hub.example.com/api/spoke/register&quot;
+
+# ... (full script)
+</code></pre>
+<p><strong>Content-Type</strong>: <code>text/x-shellscript</code> or <code>text/plain</code></p>
+<p><strong>Errors</strong>:</p>
+<ul>
+<li>400 Bad Request: Invalid token format</li>
+<li>404 Not Found: Token does not exist</li>
+<li>410 Gone: Token already used</li>
+<li>410 Gone: Token expired</li>
+<li>400 Bad Request: Invalid platform</li>
+</ul>
+<p><strong>Error Response Example</strong>:</p>
+<pre><code class="language-json">{
+  &quot;error&quot;: &quot;Installation token has expired&quot;,
+  &quot;code&quot;: &quot;TOKEN_EXPIRED&quot;,
+  &quot;expiresAt&quot;: &quot;2025-12-21T10:00:00Z&quot;,
+  &quot;recoveryHint&quot;: &quot;Tokens are valid for 24 hours. Please generate a new token.&quot;
+}
+</code></pre>
+<h3>7.4 Spoke Registration Endpoints</h3>
+<h4>POST /api/spoke/register</h4>
+<p><strong>Purpose</strong>: Spoke reports public key after installation</p>
+<p><strong>Request Body</strong>:</p>
+<pre><code class="language-json">{
+  &quot;token&quot;: &quot;Kd8jD_s9fN2mP1qR6tV8wX0yZ5aB3cE7gH4iJ&quot;,
+  &quot;publicKey&quot;: &quot;xT0m9aV3bR5eD8fG1hJ4kL6nP9qS2uX7yZ0cE4iO=&quot;,
+  &quot;os&quot;: &quot;linux&quot;,
+
+  // Proxmox-specific (optional)
+  &quot;isProxmox&quot;: false,
+  &quot;proxmoxNodeName&quot;: null,
+  &quot;proxmoxClusterName&quot;: null,
+  &quot;proxmoxVersion&quot;: null,
+  &quot;metadata&quot;: {}
+}
+</code></pre>
+<p><strong>Response</strong> (201 Created):</p>
+<pre><code class="language-json">{
+  &quot;success&quot;: true,
+  &quot;spoke&quot;: {
+    &quot;id&quot;: &quot;a1b2c3d4-e5f6-7890-abcd-ef1234567890&quot;,
+    &quot;name&quot;: &quot;laptop-001&quot;,
+    &quot;publicKey&quot;: &quot;xT0m9aV3bR5eD8fG1hJ4kL6nP9qS2uX7yZ0cE4iO=&quot;,
+    &quot;allowedIPs&quot;: [&quot;10.0.1.5/24&quot;],
+    &quot;registeredAt&quot;: &quot;2025-12-22T10:05:30Z&quot;,
+    &quot;status&quot;: &quot;pending&quot;
+  }
+}
+</code></pre>
+<p><strong>Errors</strong>:</p>
+<ul>
+<li>400 Bad Request: Invalid public key format</li>
+<li>409 Conflict: Public key already registered (impersonation attempt)</li>
+<li>410 Gone: Token already used</li>
+<li>410 Gone: Token expired</li>
+</ul>
+<h4>GET /api/spoke/list</h4>
+<p><strong>Purpose</strong>: List all registered spokes</p>
+<p><strong>Query Parameters</strong>:</p>
+<ul>
+<li><code>status</code> (optional): “pending” | “active” | “inactive”</li>
+<li><code>os</code> (optional): “linux” | “macos” | “windows” | “proxmox”</li>
+</ul>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-json">{
+  &quot;spokes&quot;: [
+    {
+      &quot;id&quot;: &quot;a1b2c3d4-e5f6-7890-abcd-ef1234567890&quot;,
+      &quot;name&quot;: &quot;laptop-001&quot;,
+      &quot;publicKey&quot;: &quot;xT0m9aV3bR5eD8fG1hJ4kL6nP9qS2uX7yZ0cE4iO=&quot;,
+      &quot;allowedIPs&quot;: [&quot;10.0.1.5/24&quot;],
+      &quot;registeredAt&quot;: &quot;2025-12-22T10:05:30Z&quot;,
+      &quot;lastHandshake&quot;: &quot;2025-12-22T10:10:00Z&quot;,
+      &quot;status&quot;: &quot;active&quot;,
+      &quot;os&quot;: &quot;linux&quot;
+    }
+  ],
+  &quot;totalCount&quot;: 25,
+  &quot;activeCount&quot;: 22,
+  &quot;inactiveCount&quot;: 2,
+  &quot;pendingCount&quot;: 1
+}
+</code></pre>
+<h4>GET /api/spoke/:id/status</h4>
+<p><strong>Purpose</strong>: Get detailed spoke status</p>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-json">{
+  &quot;spoke&quot;: {
+    &quot;id&quot;: &quot;a1b2c3d4-e5f6-7890-abcd-ef1234567890&quot;,
+    &quot;name&quot;: &quot;laptop-001&quot;,
+    &quot;publicKey&quot;: &quot;xT0m9aV3bR5eD8fG1hJ4kL6nP9qS2uX7yZ0cE4iO=&quot;,
+    &quot;allowedIPs&quot;: [&quot;10.0.1.5/24&quot;],
+    &quot;registeredAt&quot;: &quot;2025-12-22T10:05:30Z&quot;,
+    &quot;lastHandshake&quot;: &quot;2025-12-22T10:10:00Z&quot;,
+    &quot;status&quot;: &quot;active&quot;,
+    &quot;os&quot;: &quot;linux&quot;,
+    &quot;metadata&quot;: {
+      &quot;wireguardVersion&quot;: &quot;1.0.20210914&quot;,
+      &quot;kernelVersion&quot;: &quot;5.15.0-91-generic&quot;
+    }
+  },
+  &quot;wireguardPeer&quot;: {
+    &quot;endpoint&quot;: &quot;192.0.2.50:51820&quot;,
+    &quot;latestHandshake&quot;: &quot;2025-12-22T10:10:00Z&quot;,
+    &quot;transferRx&quot;: 1234567,
+    &quot;transferTx&quot;: 987654,
+    &quot;persistentKeepalive&quot;: 25
+  }
+}
+</code></pre>
+<h4>DELETE /api/spoke/:id</h4>
+<p><strong>Purpose</strong>: Remove spoke (revoke access)</p>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-json">{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Spoke removed successfully&quot;
+}
+</code></pre>
+<p><strong>Side Effects</strong>:</p>
+<ul>
+<li>Removes peer from WireGuard interface (<code>wg set wg0 peer &lt;key&gt; remove</code>)</li>
+<li>Marks spoke as deleted in database (soft delete)</li>
+<li>Spoke’s IP becomes available for reuse</li>
+</ul>
+<h3>7.5 Proxmox Cluster Endpoints</h3>
+<h4>GET /api/proxmox/clusters</h4>
+<p><strong>Purpose</strong>: List all Proxmox clusters</p>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-json">{
+  &quot;clusters&quot;: [
+    {
+      &quot;id&quot;: &quot;c3d4e5f6-a7b8-9012-cdef-123456789012&quot;,
+      &quot;clusterName&quot;: &quot;datacenter1-prod&quot;,
+      &quot;datacenter&quot;: &quot;US-East-1&quot;,
+      &quot;description&quot;: &quot;Production cluster&quot;,
+      &quot;nodeCount&quot;: 3,
+      &quot;activeNodes&quot;: 3,
+      &quot;inactiveNodes&quot;: 0,
+      &quot;createdAt&quot;: &quot;2025-12-22T11:00:00Z&quot;,
+      &quot;updatedAt&quot;: &quot;2025-12-22T11:00:00Z&quot;
+    }
+  ],
+  &quot;totalClusters&quot;: 3,
+  &quot;totalNodes&quot;: 8
+}
+</code></pre>
+<h4>GET /api/proxmox/clusters/:id</h4>
+<p><strong>Purpose</strong>: Get cluster details with all nodes</p>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-json">{
+  &quot;cluster&quot;: {
+    &quot;id&quot;: &quot;c3d4e5f6-a7b8-9012-cdef-123456789012&quot;,
+    &quot;clusterName&quot;: &quot;datacenter1-prod&quot;,
+    &quot;datacenter&quot;: &quot;US-East-1&quot;,
+    &quot;description&quot;: &quot;Production cluster&quot;,
+    &quot;createdAt&quot;: &quot;2025-12-22T11:00:00Z&quot;,
+    &quot;updatedAt&quot;: &quot;2025-12-22T11:00:00Z&quot;
+  },
+  &quot;nodes&quot;: [
+    {
+      &quot;id&quot;: &quot;b2c3d4e5-f6a7-8901-bcde-f12345678901&quot;,
+      &quot;name&quot;: &quot;pve1.dc1&quot;,
+      &quot;publicKey&quot;: &quot;yU1n0bW4cS6fE9gH2iK5lM7oQ0rT3vY8zA1dF5jP=&quot;,
+      &quot;allowedIPs&quot;: [&quot;10.0.1.10/24&quot;],
+      &quot;proxmoxNodeName&quot;: &quot;pve1&quot;,
+      &quot;proxmoxVersion&quot;: &quot;8.1.3&quot;,
+      &quot;status&quot;: &quot;active&quot;,
+      &quot;lastHandshake&quot;: &quot;2025-12-22T11:05:00Z&quot;
+    },
+    {
+      &quot;id&quot;: &quot;c3d4e5f6-a7b8-9012-cdef-123456789013&quot;,
+      &quot;name&quot;: &quot;pve2.dc1&quot;,
+      &quot;publicKey&quot;: &quot;zA2o1cX5dT7gF0hI3jL6mN8pR1sU4wZ9aB2eG6kQ=&quot;,
+      &quot;allowedIPs&quot;: [&quot;10.0.1.11/24&quot;],
+      &quot;proxmoxNodeName&quot;: &quot;pve2&quot;,
+      &quot;proxmoxVersion&quot;: &quot;8.1.3&quot;,
+      &quot;status&quot;: &quot;active&quot;,
+      &quot;lastHandshake&quot;: &quot;2025-12-22T11:04:00Z&quot;
+    }
+  ]
+}
+</code></pre>
+<h4>PUT /api/proxmox/clusters/:id</h4>
+<p><strong>Purpose</strong>: Update cluster metadata</p>
+<p><strong>Request Body</strong>:</p>
+<pre><code class="language-json">{
+  &quot;datacenter&quot;: &quot;US-East-2&quot;,
+  &quot;description&quot;: &quot;Updated description&quot;
+}
+</code></pre>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-json">{
+  &quot;success&quot;: true,
+  &quot;cluster&quot;: { /* updated cluster */ }
+}
+</code></pre>
+<h4>DELETE /api/proxmox/clusters/:id</h4>
+<p><strong>Purpose</strong>: Delete empty cluster</p>
+<p><strong>Response</strong> (200 OK):</p>
+<pre><code class="language-json">{
+  &quot;success&quot;: true,
+  &quot;message&quot;: &quot;Cluster deleted successfully&quot;
+}
+</code></pre>
+<p><strong>Errors</strong>:</p>
+<ul>
+<li>400 Bad Request: Cluster still has nodes (must remove all nodes first)</li>
+</ul>
+<hr>
+<h2>8. Installation Script Design</h2>
+<h3>8.1 Linux Installation Script Template</h3>
+<p><strong>File</strong>: <code>src/backend/scripts/install-spoke-linux.sh.template</code></p>
+<p><strong>Full Script</strong> (see plan file for complete implementation)</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Auto-detects distribution (Ubuntu/Debian/RHEL/CentOS/Fedora)</li>
+<li>Installs WireGuard via native package manager</li>
+<li>Generates keys locally (private key never transmitted)</li>
+<li>Registers with hub and receives configuration</li>
+<li>Creates systemd service for auto-start</li>
+<li>Comprehensive error handling with rollback</li>
+</ul>
+<p><strong>Placeholders Replaced</strong>:</p>
+<pre><code class="language-bash">TOKEN=&quot;{{TOKEN}}&quot;
+HUB_ENDPOINT=&quot;{{HUB_ENDPOINT}}&quot;
+HUB_PUBLIC_KEY=&quot;{{HUB_PUBLIC_KEY}}&quot;
+SPOKE_IP=&quot;{{SPOKE_IP}}&quot;
+NETWORK_CIDR=&quot;{{NETWORK_CIDR}}&quot;
+DNS_SERVERS=&quot;{{DNS_SERVERS}}&quot;
+CALLBACK_URL=&quot;{{CALLBACK_URL}}&quot;
+</code></pre>
+<h3>8.2 Proxmox Installation Script Template</h3>
+<p><strong>File</strong>: <code>src/backend/scripts/install-spoke-proxmox.sh.template</code></p>
+<p><strong>Proxmox-Specific Additions</strong>:</p>
+<ol>
+<li>
+<p><strong>Environment Detection</strong>:</p>
+<pre><code class="language-bash">if ! command -v pveversion &amp;&gt; /dev/null; then
+  echo &quot;Error: This script is designed for Proxmox VE&quot;
+  exit 1
+fi
+</code></pre>
+</li>
+<li>
+<p><strong>Cluster Detection</strong>:</p>
+<pre><code class="language-bash">CLUSTER_STATUS=$(pvecm status 2&gt;/dev/null || echo &quot;not_clustered&quot;)
+
+if echo &quot;$CLUSTER_STATUS&quot; | grep -q &quot;Cluster information&quot;; then
+  IS_CLUSTERED=true
+  CLUSTER_NAME=$(echo &quot;$CLUSTER_STATUS&quot; | grep &quot;Name:&quot; | awk '{print $2}')
+  NODE_NAME=$(hostname)
+  CLUSTER_NODES=$(pvecm nodes | grep -v &quot;^Node&quot; | awk '{print $3}' | tr '\n' ',' | sed 's/,$//')
+else
+  IS_CLUSTERED=false
+  NODE_NAME=$(hostname)
+fi
+</code></pre>
+</li>
+<li>
+<p><strong>Registration with Metadata</strong>:</p>
+<pre><code class="language-bash">curl -X POST &quot;$CALLBACK_URL&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &quot;{
+    \&quot;token\&quot;: \&quot;$TOKEN\&quot;,
+    \&quot;publicKey\&quot;: \&quot;$PUBLIC_KEY\&quot;,
+    \&quot;os\&quot;: \&quot;proxmox\&quot;,
+    \&quot;isProxmox\&quot;: true,
+    \&quot;proxmoxNodeName\&quot;: \&quot;$NODE_NAME\&quot;,
+    \&quot;proxmoxClusterName\&quot;: \&quot;$CLUSTER_NAME\&quot;,
+    \&quot;proxmoxVersion\&quot;: \&quot;$PVE_VERSION\&quot;,
+    \&quot;metadata\&quot;: {
+      \&quot;isClustered\&quot;: $IS_CLUSTERED,
+      \&quot;clusterNodes\&quot;: \&quot;$CLUSTER_NODES\&quot;
+    }
+  }&quot;
+</code></pre>
+</li>
+</ol>
+<h3>8.3 macOS Installation Script</h3>
+<p><strong>Differences from Linux</strong>:</p>
+<ul>
+<li>Install via Homebrew: <code>brew install wireguard-tools</code></li>
+<li>No systemd - use <code>launchd</code> plist for auto-start:<pre><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;
+&lt;plist version=&quot;1.0&quot;&gt;
+&lt;dict&gt;
+  &lt;key&gt;Label&lt;/key&gt;
+  &lt;string&gt;com.wireguard.wg0&lt;/string&gt;
+  &lt;key&gt;ProgramArguments&lt;/key&gt;
+  &lt;array&gt;
+    &lt;string&gt;/usr/local/bin/wg-quick&lt;/string&gt;
+    &lt;string&gt;up&lt;/string&gt;
+    &lt;string&gt;wg0&lt;/string&gt;
+  &lt;/array&gt;
+  &lt;key&gt;RunAtLoad&lt;/key&gt;
+  &lt;true/&gt;
+  &lt;key&gt;KeepAlive&lt;/key&gt;
+  &lt;true/&gt;
+&lt;/dict&gt;
+&lt;/plist&gt;
+</code></pre>
+</li>
+</ul>
+<h3>8.4 Windows PowerShell Script</h3>
+<p><strong>File</strong>: <code>src/backend/scripts/install-spoke-windows.ps1.template</code></p>
+<p><strong>Key Differences</strong>:</p>
+<ul>
+<li>Requires admin privileges: <code>#Requires -RunAsAdministrator</code></li>
+<li>Install via Chocolatey: <code>choco install wireguard -y</code></li>
+<li>Config location: <code>%ProgramFiles%\WireGuard\wg0.conf</code></li>
+<li>Service management: <code>wireguard /installtunnelservice wg0.conf</code></li>
+</ul>
+<p><strong>PowerShell Syntax</strong>:</p>
+<pre><code class="language-powershell"># Generate keys
+$PrivateKey = &amp; wg genkey
+$PublicKey = $PrivateKey | wg pubkey
+
+# Register with hub
+$Body = @{
+  token = $TOKEN
+  publicKey = $PublicKey
+  os = &quot;windows&quot;
+} | ConvertTo-Json
+
+$Response = Invoke-RestMethod -Uri $CALLBACK_URL -Method POST -Body $Body -ContentType &quot;application/json&quot;
+
+# Create config
+$ConfigContent = @&quot;
+[Interface]
+Address = $SPOKE_IP
+PrivateKey = $PrivateKey
+DNS = $DNS_SERVERS
+
+[Peer]
+PublicKey = $HUB_PUBLIC_KEY
+Endpoint = $HUB_ENDPOINT
+AllowedIPs = $NETWORK_CIDR
+PersistentKeepalive = 25
+&quot;@
+
+Set-Content -Path &quot;$env:ProgramFiles\WireGuard\wg0.conf&quot; -Value $ConfigContent
+
+# Install and start service
+&amp; wireguard /installtunnelservice &quot;$env:ProgramFiles\WireGuard\wg0.conf&quot;
+</code></pre>
+<hr>
+<h2>9. Frontend Components</h2>
+<h3>9.1 Component Hierarchy</h3>
+<pre><code>App
+├─ HubContext (State Management)
+│
+├─ HubInitializer (First-Run Setup)
+│   ├─ Network Configuration Form
+│   ├─ Endpoint Input
+│   ├─ DNS Settings
+│   └─ Initialize Button
+│
+├─ Dashboard
+│   ├─ HubStatusPanel
+│   │   ├─ Hub Public Key Display
+│   │   ├─ Network CIDR Info
+│   │   ├─ Active Spokes Count
+│   │   └─ Edit Config Button
+│   │
+│   ├─ SpokeManager
+│   │   ├─ View Mode Toggle (All | By Type | Proxmox Clusters)
+│   │   ├─ Add Spoke Button → InstallationTokenGenerator
+│   │   ├─ Spoke Table/List
+│   │   │   ├─ Regular Spokes (Linux/Mac/Windows)
+│   │   │   └─ ProxmoxClusterView
+│   │   └─ Status Filters
+│   │
+│   └─ DashboardSummary
+│       ├─ Total Spokes
+│       ├─ Proxmox Stats (Clusters, Nodes)
+│       └─ Network Utilization
+│
+├─ InstallationTokenGenerator (Modal)
+│   ├─ Spoke Name Input
+│   ├─ Custom IP Input (Optional)
+│   ├─ Generate Token Button
+│   └─ Success → InstallationInstructions
+│
+└─ InstallationInstructions (Modal)
+    ├─ Tabbed Interface (Linux | macOS | Windows | Proxmox)
+    ├─ Copy-to-Clipboard Buttons
+    ├─ Token Expiration Countdown
+    └─ Installation Status Polling
+</code></pre>
+<h3>9.2 HubContext (State Management)</h3>
+<p><strong>File</strong>: <code>src/contexts/HubContext.tsx</code></p>
+<pre><code class="language-typescript">interface HubContextValue {
+  // Hub state
+  hubConfig: HubConfig | null
+  hubInitialized: boolean
+  hubStatus: HubStatus | null
+
+  // Spoke state
+  spokes: SpokeRegistration[]
+  pendingTokens: InstallationToken[]
+  proxmoxClusters: ProxmoxCluster[]
+
+  // Loading states
+  isLoading: boolean
+  error: string | null
+
+  // Hub actions
+  initializeHub: (config: HubInitConfig) =&gt; Promise&lt;void&gt;
+  updateHubConfig: (updates: Partial&lt;HubConfig&gt;) =&gt; Promise&lt;void&gt;
+  refreshHubStatus: () =&gt; Promise&lt;void&gt;
+
+  // Token actions
+  generateToken: (spokeName: string, customIP?: string) =&gt; Promise&lt;InstallationToken&gt;
+  revokeToken: (tokenId: string) =&gt; Promise&lt;void&gt;
+  refreshTokens: () =&gt; Promise&lt;void&gt;
+
+  // Spoke actions
+  refreshSpokes: () =&gt; Promise&lt;void&gt;
+  removeSpoke: (spokeId: string) =&gt; Promise&lt;void&gt;
+
+  // Proxmox actions
+  refreshProxmoxClusters: () =&gt; Promise&lt;void&gt;
+  updateClusterMetadata: (clusterId: string, updates: { datacenter?: string, description?: string }) =&gt; Promise&lt;void&gt;
+}
+
+export const HubProvider: React.FC&lt;{ children: React.ReactNode }&gt; = ({ children }) =&gt; {
+  const [hubConfig, setHubConfig] = useState&lt;HubConfig | null&gt;(null)
+  const [spokes, setSpokes] = useState&lt;SpokeRegistration[]&gt;([])
+  // ... other state
+
+  // Fetch hub config on mount
+  useEffect(() =&gt; {
+    fetch('/api/hub/config')
+      .then(res =&gt; res.json())
+      .then(data =&gt; setHubConfig(data))
+      .catch(err =&gt; setError(err.message))
+  }, [])
+
+  // Auto-refresh spokes every 30 seconds
+  useEffect(() =&gt; {
+    const interval = setInterval(() =&gt; {
+      refreshSpokes()
+    }, 30000)
+    return () =&gt; clearInterval(interval)
+  }, [])
+
+  // ... implementation of all methods
+
+  return (
+    &lt;HubContext.Provider value={{ /* all values */ }}&gt;
+      {children}
+    &lt;/HubContext.Provider&gt;
+  )
+}
+</code></pre>
+<h3>9.3 HubInitializer Component</h3>
+<p><strong>File</strong>: <code>src/components/HubInitializer.tsx</code></p>
+<p><strong>Purpose</strong>: First-run setup wizard</p>
+<pre><code class="language-tsx">export const HubInitializer: React.FC = () =&gt; {
+  const { initializeHub } = useHubContext()
+  const [formData, setFormData] = useState({
+    networkCIDR: '10.0.1.0/24',
+    listenPort: 51820,
+    endpoint: '',
+    dns: '1.1.1.1, 8.8.8.8'
+  })
+
+  const handleSubmit = async (e: React.FormEvent) =&gt; {
+    e.preventDefault()
+
+    const config: HubInitConfig = {
+      networkCIDR: formData.networkCIDR,
+      listenPort: formData.listenPort,
+      endpoint: formData.endpoint,
+      dns: formData.dns.split(',').map(s =&gt; s.trim())
+    }
+
+    await initializeHub(config)
+  }
+
+  return (
+    &lt;div className=&quot;hub-initializer&quot;&gt;
+      &lt;h1&gt;Hub Setup Wizard&lt;/h1&gt;
+      &lt;form onSubmit={handleSubmit}&gt;
+        &lt;label&gt;
+          Network CIDR:
+          &lt;input
+            type=&quot;text&quot;
+            value={formData.networkCIDR}
+            onChange={e =&gt; setFormData({ ...formData, networkCIDR: e.target.value })}
+            placeholder=&quot;10.0.1.0/24&quot;
+          /&gt;
+        &lt;/label&gt;
+
+        &lt;label&gt;
+          Public Endpoint:
+          &lt;input
+            type=&quot;text&quot;
+            value={formData.endpoint}
+            onChange={e =&gt; setFormData({ ...formData, endpoint: e.target.value })}
+            placeholder=&quot;203.0.113.5:51820&quot;
+            required
+          /&gt;
+        &lt;/label&gt;
+
+        &lt;label&gt;
+          DNS Servers (comma-separated):
+          &lt;input
+            type=&quot;text&quot;
+            value={formData.dns}
+            onChange={e =&gt; setFormData({ ...formData, dns: e.target.value })}
+          /&gt;
+        &lt;/label&gt;
+
+        &lt;button type=&quot;submit&quot;&gt;Initialize Hub&lt;/button&gt;
+      &lt;/form&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<h3>9.4 SpokeManager Component</h3>
+<p><strong>File</strong>: <code>src/components/SpokeManager.tsx</code></p>
+<pre><code class="language-tsx">export const SpokeManager: React.FC = () =&gt; {
+  const { spokes, removeSpoke, refreshSpokes } = useHubContext()
+  const [viewMode, setViewMode] = useState&lt;'all' | 'by-type' | 'proxmox-clusters'&gt;('all')
+  const [showTokenGenerator, setShowTokenGenerator] = useState(false)
+
+  const getStatusIcon = (spoke: SpokeRegistration) =&gt; {
+    if (spoke.status === 'active') return '✅'
+    if (spoke.status === 'pending') return '🟡'
+    return '❌'
+  }
+
+  const getLastHandshakeDisplay = (lastHandshake?: Date) =&gt; {
+    if (!lastHandshake) return 'Never'
+    const seconds = Math.floor((Date.now() - new Date(lastHandshake).getTime()) / 1000)
+    if (seconds &lt; 60) return `${seconds} sec ago`
+    if (seconds &lt; 3600) return `${Math.floor(seconds / 60)} min ago`
+    return `${Math.floor(seconds / 3600)} hours ago`
+  }
+
+  return (
+    &lt;div className=&quot;spoke-manager&quot;&gt;
+      &lt;div className=&quot;header&quot;&gt;
+        &lt;h2&gt;Spokes&lt;/h2&gt;
+        &lt;button onClick={() =&gt; setShowTokenGenerator(true)}&gt;+ Add Spoke&lt;/button&gt;
+        &lt;button onClick={refreshSpokes}&gt;Refresh&lt;/button&gt;
+      &lt;/div&gt;
+
+      &lt;div className=&quot;view-mode-toggle&quot;&gt;
+        &lt;button onClick={() =&gt; setViewMode('all')}&gt;All Spokes&lt;/button&gt;
+        &lt;button onClick={() =&gt; setViewMode('by-type')}&gt;By Type&lt;/button&gt;
+        &lt;button onClick={() =&gt; setViewMode('proxmox-clusters')}&gt;Proxmox Clusters&lt;/button&gt;
+      &lt;/div&gt;
+
+      {viewMode === 'all' &amp;&amp; (
+        &lt;table&gt;
+          &lt;thead&gt;
+            &lt;tr&gt;
+              &lt;th&gt;Status&lt;/th&gt;
+              &lt;th&gt;Name&lt;/th&gt;
+              &lt;th&gt;IP&lt;/th&gt;
+              &lt;th&gt;OS&lt;/th&gt;
+              &lt;th&gt;Last Handshake&lt;/th&gt;
+              &lt;th&gt;Actions&lt;/th&gt;
+            &lt;/tr&gt;
+          &lt;/thead&gt;
+          &lt;tbody&gt;
+            {spokes.map(spoke =&gt; (
+              &lt;tr key={spoke.id}&gt;
+                &lt;td&gt;{getStatusIcon(spoke)}&lt;/td&gt;
+                &lt;td&gt;{spoke.name}&lt;/td&gt;
+                &lt;td&gt;{spoke.allowedIPs[0]}&lt;/td&gt;
+                &lt;td&gt;{spoke.os}&lt;/td&gt;
+                &lt;td&gt;{getLastHandshakeDisplay(spoke.lastHandshake)}&lt;/td&gt;
+                &lt;td&gt;
+                  &lt;button onClick={() =&gt; removeSpoke(spoke.id)}&gt;Remove&lt;/button&gt;
+                &lt;/td&gt;
+              &lt;/tr&gt;
+            ))}
+          &lt;/tbody&gt;
+        &lt;/table&gt;
+      )}
+
+      {viewMode === 'proxmox-clusters' &amp;&amp; &lt;ProxmoxClusterView /&gt;}
+
+      {showTokenGenerator &amp;&amp; (
+        &lt;InstallationTokenGenerator onClose={() =&gt; setShowTokenGenerator(false)} /&gt;
+      )}
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<h3>9.5 ProxmoxClusterView Component</h3>
+<p><strong>File</strong>: <code>src/components/ProxmoxClusterView.tsx</code></p>
+<pre><code class="language-tsx">export const ProxmoxClusterView: React.FC = () =&gt; {
+  const { spokes, proxmoxClusters } = useHubContext()
+  const [expandedClusters, setExpandedClusters] = useState&lt;Set&lt;string&gt;&gt;(new Set())
+
+  const toggleCluster = (clusterId: string) =&gt; {
+    const newExpanded = new Set(expandedClusters)
+    if (newExpanded.has(clusterId)) {
+      newExpanded.delete(clusterId)
+    } else {
+      newExpanded.add(clusterId)
+    }
+    setExpandedClusters(newExpanded)
+  }
+
+  const getClusterStatus = (cluster: ProxmoxCluster) =&gt; {
+    const nodes = spokes.filter(s =&gt; s.proxmoxClusterId === cluster.id)
+    const activeNodes = nodes.filter(n =&gt; n.status === 'active').length
+    const totalNodes = nodes.length
+
+    if (activeNodes === totalNodes) return { icon: '✅', text: 'All Active' }
+    if (activeNodes === 0) return { icon: '❌', text: 'All Inactive' }
+    return { icon: '⚠️', text: 'Degraded' }
+  }
+
+  const standaloneProxmoxNodes = spokes.filter(s =&gt; s.isProxmox &amp;&amp; !s.proxmoxClusterId)
+
+  return (
+    &lt;div className=&quot;proxmox-cluster-view&quot;&gt;
+      {proxmoxClusters.map(cluster =&gt; {
+        const status = getClusterStatus(cluster)
+        const nodes = spokes.filter(s =&gt; s.proxmoxClusterId === cluster.id)
+        const isExpanded = expandedClusters.has(cluster.id)
+
+        return (
+          &lt;div key={cluster.id} className=&quot;cluster&quot;&gt;
+            &lt;div className=&quot;cluster-header&quot; onClick={() =&gt; toggleCluster(cluster.id)}&gt;
+              &lt;span className=&quot;icon&quot;&gt;🏢&lt;/span&gt;
+              &lt;span className=&quot;name&quot;&gt;Cluster: {cluster.clusterName}&lt;/span&gt;
+              &lt;span className=&quot;node-count&quot;&gt;({nodes.length} nodes)&lt;/span&gt;
+              &lt;span className=&quot;status&quot;&gt;{status.icon} {status.text}&lt;/span&gt;
+              &lt;span className=&quot;toggle&quot;&gt;{isExpanded ? '▼' : '▶'}&lt;/span&gt;
+            &lt;/div&gt;
+
+            {isExpanded &amp;&amp; (
+              &lt;div className=&quot;cluster-nodes&quot;&gt;
+                {nodes.map(node =&gt; (
+                  &lt;div key={node.id} className=&quot;node&quot;&gt;
+                    &lt;span className=&quot;icon&quot;&gt;🖥️&lt;/span&gt;
+                    &lt;span className=&quot;name&quot;&gt;{node.proxmoxNodeName}&lt;/span&gt;
+                    &lt;span className=&quot;ip&quot;&gt;{node.allowedIPs[0]}&lt;/span&gt;
+                    &lt;span className=&quot;status&quot;&gt;{node.status === 'active' ? '✅ Active' : '❌ Inactive'}&lt;/span&gt;
+                    &lt;span className=&quot;handshake&quot;&gt;
+                      {getLastHandshakeDisplay(node.lastHandshake)}
+                    &lt;/span&gt;
+                  &lt;/div&gt;
+                ))}
+              &lt;/div&gt;
+            )}
+          &lt;/div&gt;
+        )
+      })}
+
+      {standaloneProxmoxNodes.length &gt; 0 &amp;&amp; (
+        &lt;div className=&quot;standalone-section&quot;&gt;
+          &lt;h3&gt;💻 Standalone Proxmox Hosts&lt;/h3&gt;
+          {standaloneProxmoxNodes.map(node =&gt; (
+            &lt;div key={node.id} className=&quot;node&quot;&gt;
+              &lt;span className=&quot;icon&quot;&gt;🖥️&lt;/span&gt;
+              &lt;span className=&quot;name&quot;&gt;{node.name}&lt;/span&gt;
+              &lt;span className=&quot;ip&quot;&gt;{node.allowedIPs[0]}&lt;/span&gt;
+              &lt;span className=&quot;status&quot;&gt;{node.status === 'active' ? '✅ Active' : '❌ Inactive'}&lt;/span&gt;
+            &lt;/div&gt;
+          ))}
+        &lt;/div&gt;
+      )}
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<h3>9.6 InstallationInstructions Component</h3>
+<p><strong>File</strong>: <code>src/components/InstallationInstructions.tsx</code></p>
+<pre><code class="language-tsx">export const InstallationInstructions: React.FC&lt;{ token: InstallationToken }&gt; = ({ token }) =&gt; {
+  const [selectedPlatform, setSelectedPlatform] = useState&lt;'linux' | 'macos' | 'windows' | 'proxmox'&gt;('linux')
+  const [copied, setCopied] = useState(false)
+
+  const commands = {
+    linux: `curl -sSL https://hub.example.com/api/installation/script/${token.token}?platform=linux | sudo bash`,
+    macos: `curl -sSL https://hub.example.com/api/installation/script/${token.token}?platform=macos | sudo bash`,
+    windows: `Invoke-WebRequest -Uri &quot;https://hub.example.com/api/installation/script/${token.token}?platform=windows&quot; -UseBasicParsing | Invoke-Expression`,
+    proxmox: `curl -sSL https://hub.example.com/api/installation/script/${token.token}?platform=proxmox | bash`
+  }
+
+  const copyToClipboard = () =&gt; {
+    navigator.clipboard.writeText(commands[selectedPlatform])
+    setCopied(true)
+    setTimeout(() =&gt; setCopied(false), 2000)
+  }
+
+  return (
+    &lt;div className=&quot;installation-instructions&quot;&gt;
+      &lt;h2&gt;Installation Instructions&lt;/h2&gt;
+
+      &lt;div className=&quot;tabs&quot;&gt;
+        &lt;button onClick={() =&gt; setSelectedPlatform('linux')}&gt;Linux&lt;/button&gt;
+        &lt;button onClick={() =&gt; setSelectedPlatform('macos')}&gt;macOS&lt;/button&gt;
+        &lt;button onClick={() =&gt; setSelectedPlatform('windows')}&gt;Windows&lt;/button&gt;
+        &lt;button onClick={() =&gt; setSelectedPlatform('proxmox')}&gt;Proxmox VE&lt;/button&gt;
+      &lt;/div&gt;
+
+      &lt;div className=&quot;command-box&quot;&gt;
+        &lt;code&gt;{commands[selectedPlatform]}&lt;/code&gt;
+        &lt;button onClick={copyToClipboard}&gt;
+          {copied ? 'Copied!' : 'Copy'}
+        &lt;/button&gt;
+      &lt;/div&gt;
+
+      {selectedPlatform === 'proxmox' &amp;&amp; (
+        &lt;div className=&quot;proxmox-note&quot;&gt;
+          &lt;strong&gt;Proxmox Multi-Node Deployment&lt;/strong&gt;
+          &lt;p&gt;For clustered Proxmox setups:&lt;/p&gt;
+          &lt;ol&gt;
+            &lt;li&gt;Run this command on EACH node in the cluster&lt;/li&gt;
+            &lt;li&gt;Each node will auto-detect cluster membership&lt;/li&gt;
+            &lt;li&gt;Each node gets a unique IP and configuration&lt;/li&gt;
+          &lt;/ol&gt;
+        &lt;/div&gt;
+      )}
+
+      &lt;div className=&quot;token-info&quot;&gt;
+        &lt;p&gt;Token expires: {new Date(token.expiresAt).toLocaleString()}&lt;/p&gt;
+        &lt;p&gt;Allocated IP: {token.allowedIPs[0]}&lt;/p&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<hr>
+<h2>10. Backend Services</h2>
+<h3>10.1 TokenService</h3>
+<p><strong>File</strong>: <code>src/backend/services/TokenService.ts</code></p>
+<p><strong>Already Implemented</strong> (see code in repository)</p>
+<p><strong>Key Methods</strong>:</p>
+<ul>
+<li><code>generateToken()</code>: Create secure 256-bit token, allocate IP</li>
+<li><code>validateAndMarkUsed()</code>: Atomic validation and usage marking</li>
+<li><code>revokeToken()</code>: Invalidate unused token</li>
+<li><code>cleanupExpired()</code>: Remove expired tokens (cron job)</li>
+</ul>
+<h3>10.2 WireGuardService</h3>
+<p><strong>File</strong>: <code>src/backend/services/WireGuardService.ts</code></p>
+<p><strong>Purpose</strong>: Manage hub WireGuard interface</p>
+<pre><code class="language-typescript">import { spawn } from 'child_process'
+import { db } from '../config/database'
+import type { SpokeRegistration, HubConfig } from '../../types'
+
+export class WireGuardService {
+  /**
+   * Initialize hub WireGuard interface (first-run setup)
+   */
+  static async initializeHub(config: HubConfig): Promise&lt;void&gt; {
+    // Generate keys
+    const privateKey = await this.executeCommand('wg', ['genkey'])
+    const publicKey = await this.executeCommand('sh', ['-c', `echo &quot;${privateKey}&quot; | wg pubkey`])
+
+    // Create /etc/wireguard/wg0.conf
+    const wgConfig = `
+[Interface]
+Address = ${config.interfaceAddress}
+ListenPort = ${config.listenPort}
+PrivateKey = ${privateKey}
+`.trim()
+
+    await this.writeFile('/etc/wireguard/wg0.conf', wgConfig)
+    await this.executeCommand('chmod', ['600', '/etc/wireguard/wg0.conf'])
+
+    // Enable and start service
+    await this.executeCommand('systemctl', ['enable', 'wg-quick@wg0'])
+    await this.executeCommand('systemctl', ['start', 'wg-quick@wg0'])
+
+    // Store keys in database (encrypted)
+    db.prepare(`
+      UPDATE hub_config
+      SET private_key = ?, public_key = ?
+      WHERE id = 1
+    `).run(privateKey, publicKey)
+  }
+
+  /**
+   * Add spoke peer to WireGuard interface
+   */
+  static async addSpokePeer(spoke: SpokeRegistration): Promise&lt;void&gt; {
+    // Extract IP without CIDR prefix for allowed-ips
+    const ip = spoke.allowedIPs[0].split('/')[0]
+
+    // Add peer
+    await this.executeCommand('wg', [
+      'set', 'wg0',
+      'peer', spoke.publicKey,
+      'allowed-ips', `${ip}/32`,
+      'persistent-keepalive', '25'
+    ])
+
+    // Persist config
+    await this.executeCommand('wg-quick', ['save', 'wg0'])
+  }
+
+  /**
+   * Remove spoke peer from WireGuard interface
+   */
+  static async removeSpokePeer(publicKey: string): Promise&lt;void&gt; {
+    await this.executeCommand('wg', ['set', 'wg0', 'peer', publicKey, 'remove'])
+    await this.executeCommand('wg-quick', ['save', 'wg0'])
+  }
+
+  /**
+   * Reload WireGuard config without disrupting connections
+   */
+  static async reloadConfig(): Promise&lt;void&gt; {
+    await this.executeCommand('sh', ['-c', 'wg syncconf wg0 &lt;(wg-quick strip wg0)'])
+  }
+
+  /**
+   * Get current WireGuard interface status
+   */
+  static async getStatus(): Promise&lt;any&gt; {
+    const output = await this.executeCommand('wg', ['show', 'wg0', 'dump'])
+
+    // Parse output (tab-separated values)
+    const lines = output.trim().split('\n')
+    const [interfaceLine, ...peerLines] = lines
+
+    const [privateKey, publicKey, listenPort, fwmark] = interfaceLine.split('\t')
+
+    const peers = peerLines.map(line =&gt; {
+      const [peerPublicKey, presharedKey, endpoint, allowedIPs, latestHandshake, rxBytes, txBytes, persistentKeepalive] = line.split('\t')
+
+      return {
+        publicKey: peerPublicKey,
+        endpoint: endpoint || null,
+        allowedIPs: allowedIPs.split(','),
+        latestHandshake: latestHandshake !== '0' ? new Date(parseInt(latestHandshake) * 1000) : null,
+        transferRx: parseInt(rxBytes),
+        transferTx: parseInt(txBytes),
+        persistentKeepalive: parseInt(persistentKeepalive)
+      }
+    })
+
+    return {
+      interface: 'wg0',
+      publicKey,
+      listenPort: parseInt(listenPort),
+      peerCount: peers.length,
+      peers
+    }
+  }
+
+  /**
+   * Execute shell command safely (prevent injection)
+   */
+  private static executeCommand(command: string, args: string[]): Promise&lt;string&gt; {
+    return new Promise((resolve, reject) =&gt; {
+      const child = spawn(command, args, { shell: false })
+
+      let stdout = ''
+      let stderr = ''
+
+      child.stdout.on('data', (data) =&gt; { stdout += data })
+      child.stderr.on('data', (data) =&gt; { stderr += data })
+
+      child.on('close', (code) =&gt; {
+        if (code !== 0) {
+          reject(new Error(`Command failed: ${command} ${args.join(' ')}\n${stderr}`))
+        } else {
+          resolve(stdout.trim())
+        }
+      })
+
+      child.on('error', (err) =&gt; {
+        reject(err)
+      })
+    })
+  }
+
+  private static async writeFile(path: string, content: string): Promise&lt;void&gt; {
+    const fs = await import('fs/promises')
+    await fs.writeFile(path, content, { mode: 0o600 })
+  }
+}
+</code></pre>
+<h3>10.3 ScriptGenerator</h3>
+<p><strong>File</strong>: <code>src/backend/services/ScriptGenerator.ts</code></p>
+<pre><code class="language-typescript">import { readFileSync } from 'fs'
+import { join } from 'path'
+import type { InstallationToken } from '../../types'
+
+export class ScriptGenerator {
+  private static templates = {
+    linux: join(__dirname, '../scripts/install-spoke-linux.sh.template'),
+    macos: join(__dirname, '../scripts/install-spoke-macos.sh.template'),
+    windows: join(__dirname, '../scripts/install-spoke-windows.ps1.template'),
+    proxmox: join(__dirname, '../scripts/install-spoke-proxmox.sh.template')
+  }
+
+  /**
+   * Generate platform-specific installation script
+   */
+  static generateScript(
+    platform: 'linux' | 'macos' | 'windows' | 'proxmox',
+    tokenData: InstallationToken
+  ): string {
+    const templatePath = this.templates[platform]
+    const template = readFileSync(templatePath, 'utf-8')
+
+    // Replace placeholders
+    const script = template
+      .replace(/\{\{TOKEN\}\}/g, tokenData.token)
+      .replace(/\{\{HUB_ENDPOINT\}\}/g, tokenData.hubEndpoint)
+      .replace(/\{\{HUB_PUBLIC_KEY\}\}/g, tokenData.hubPublicKey)
+      .replace(/\{\{SPOKE_IP\}\}/g, tokenData.allowedIPs[0])
+      .replace(/\{\{NETWORK_CIDR\}\}/g, tokenData.networkCIDR)
+      .replace(/\{\{DNS_SERVERS\}\}/g, tokenData.dns?.join(', ') || '')
+      .replace(/\{\{CALLBACK_URL\}\}/g, `${process.env.API_BASE_URL}/api/spoke/register`)
+      .replace(/\{\{PERSISTENT_KEEPALIVE\}\}/g, tokenData.persistentKeepalive.toString())
+
+    return script
+  }
+
+  /**
+   * Validate template exists
+   */
+  static templateExists(platform: string): boolean {
+    return platform in this.templates
+  }
+}
+</code></pre>
+<h3>10.4 IPAddressPool</h3>
+<p><strong>File</strong>: <code>src/backend/services/IPAddressPool.ts</code></p>
+<p><strong>Already Implemented</strong> (see code in repository)</p>
+<p><strong>Key Methods</strong>:</p>
+<ul>
+<li><code>getNextAvailableIP()</code>: Find next free IP in CIDR range</li>
+<li><code>isIPInNetwork()</code>: Validate IP belongs to network</li>
+<li><code>isValidIP()</code>: Validate IP format</li>
+</ul>
+<hr>
+<h2>11. Deployment Guide</h2>
+<h3>11.1 Prerequisites</h3>
+<p><strong>Server Requirements</strong>:</p>
+<ul>
+<li>Ubuntu 22.04 LTS or newer</li>
+<li>Public IPv4 address</li>
+<li>Domain name (e.g., <code>hub.example.com</code>)</li>
+<li>Root or sudo access</li>
+</ul>
+<p><strong>Software Requirements</strong>:</p>
+<ul>
+<li>Node.js 18+ and npm</li>
+<li>WireGuard kernel module</li>
+<li>Nginx or Caddy (reverse proxy)</li>
+<li>Certbot (Let’s Encrypt TLS)</li>
+</ul>
+<h3>11.2 Installation Steps</h3>
+<h4>Step 1: Install Dependencies</h4>
+<pre><code class="language-bash"># Update system
+sudo apt update &amp;&amp; sudo apt upgrade -y
+
+# Install Node.js 18
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install WireGuard
+sudo apt install -y wireguard wireguard-tools
+
+# Install Nginx
+sudo apt install -y nginx
+
+# Install Certbot
+sudo apt install -y certbot python3-certbot-nginx
+</code></pre>
+<h4>Step 2: Clone Repository and Build</h4>
+<pre><code class="language-bash"># Clone repository
+git clone https://github.com/your-org/hub-and-spoke-wireguard.git
+cd hub-and-spoke-wireguard
+
+# Install dependencies
+npm install
+
+# Build frontend
+npm run build
+
+# Build backend
+npm run build:backend
+</code></pre>
+<h4>Step 3: Configure Environment Variables</h4>
+<pre><code class="language-bash"># Create .env file
+cat &gt; .env.backend &lt;&lt;EOF
+NODE_ENV=production
+PORT=3000
+DATABASE_PATH=/var/lib/wireguard-hub/database.sqlite
+API_BASE_URL=https://hub.example.com
+CORS_ORIGIN=https://hub.example.com
+TOKEN_EXPIRATION_HOURS=24
+RATE_LIMIT_MAX_TOKENS_PER_HOUR=10
+EOF
+
+# Create database directory
+sudo mkdir -p /var/lib/wireguard-hub
+sudo chown $USER:$USER /var/lib/wireguard-hub
+</code></pre>
+<h4>Step 4: Initialize Database</h4>
+<pre><code class="language-bash">npm run db:migrate
+</code></pre>
+<h4>Step 5: Configure Nginx</h4>
+<pre><code class="language-bash"># Create Nginx config
+sudo cat &gt; /etc/nginx/sites-available/wireguard-hub &lt;&lt;'EOF'
+server {
+    listen 80;
+    server_name hub.example.com;
+
+    # Let's Encrypt challenge
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    # Redirect to HTTPS
+    location / {
+        return 301 https://$server_name$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name hub.example.com;
+
+    # TLS certificates (will be configured by Certbot)
+    ssl_certificate /etc/letsencrypt/live/hub.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/hub.example.com/privkey.pem;
+
+    # TLS settings
+    ssl_protocols TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_ciphers 'TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256';
+
+    # HSTS
+    add_header Strict-Transport-Security &quot;max-age=31536000; includeSubDomains&quot; always;
+
+    # Serve static files (React SPA)
+    root /home/ubuntu/hub-and-spoke-wireguard/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy API requests to Express backend
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+EOF
+
+# Enable site
+sudo ln -s /etc/nginx/sites-available/wireguard-hub /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+
+# Test config
+sudo nginx -t
+</code></pre>
+<h4>Step 6: Obtain TLS Certificate</h4>
+<pre><code class="language-bash">sudo certbot --nginx -d hub.example.com
+</code></pre>
+<h4>Step 7: Create Systemd Service</h4>
+<pre><code class="language-bash"># Create service file
+sudo cat &gt; /etc/systemd/system/wireguard-hub-api.service &lt;&lt;EOF
+[Unit]
+Description=WireGuard Hub API
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/hub-and-spoke-wireguard
+Environment=&quot;NODE_ENV=production&quot;
+EnvironmentFile=/home/ubuntu/hub-and-spoke-wireguard/.env.backend
+ExecStart=/usr/bin/node dist-backend/server.js
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload systemd
+sudo systemctl daemon-reload
+
+# Enable and start service
+sudo systemctl enable wireguard-hub-api
+sudo systemctl start wireguard-hub-api
+
+# Check status
+sudo systemctl status wireguard-hub-api
+</code></pre>
+<h4>Step 8: Configure Firewall</h4>
+<pre><code class="language-bash"># Allow SSH (if not already allowed)
+sudo ufw allow 22/tcp
+
+# Allow HTTPS
+sudo ufw allow 443/tcp
+
+# Allow WireGuard
+sudo ufw allow 51820/udp
+
+# Enable firewall
+sudo ufw enable
+</code></pre>
+<h4>Step 9: Initialize Hub via Dashboard</h4>
+<ol>
+<li>Open browser: <code>https://hub.example.com</code></li>
+<li>Fill in first-run setup wizard:
+<ul>
+<li>Network CIDR: <code>10.0.1.0/24</code></li>
+<li>Listen Port: <code>51820</code></li>
+<li>Public Endpoint: <code>&lt;your-public-ip&gt;:51820</code></li>
+<li>DNS: <code>1.1.1.1, 8.8.8.8</code></li>
+</ul>
+</li>
+<li>Click “Initialize Hub”</li>
+</ol>
+<p><strong>The hub is now operational!</strong></p>
+<h3>11.3 Backup Strategy</h3>
+<p><strong>Database Backup</strong> (Daily Cron):</p>
+<pre><code class="language-bash"># Create backup script
+cat &gt; /usr/local/bin/backup-wireguard-hub.sh &lt;&lt;'EOF'
+#!/bin/bash
+set -e
+
+BACKUP_DIR=&quot;/var/backups/wireguard-hub&quot;
+DB_PATH=&quot;/var/lib/wireguard-hub/database.sqlite&quot;
+DATE=$(date +%Y-%m-%d_%H-%M-%S)
+
+mkdir -p $BACKUP_DIR
+
+# Backup database
+sqlite3 $DB_PATH &quot;.backup '$BACKUP_DIR/database_$DATE.sqlite'&quot;
+
+# Backup WireGuard config
+cp /etc/wireguard/wg0.conf $BACKUP_DIR/wg0_$DATE.conf
+
+# Encrypt with GPG
+gpg --symmetric --cipher-algo AES256 $BACKUP_DIR/database_$DATE.sqlite
+gpg --symmetric --cipher-algo AES256 $BACKUP_DIR/wg0_$DATE.conf
+
+# Remove unencrypted files
+rm $BACKUP_DIR/database_$DATE.sqlite
+rm $BACKUP_DIR/wg0_$DATE.conf
+
+# Keep only last 30 days
+find $BACKUP_DIR -name &quot;*.gpg&quot; -mtime +30 -delete
+
+echo &quot;Backup completed: $DATE&quot;
+EOF
+
+chmod +x /usr/local/bin/backup-wireguard-hub.sh
+
+# Add cron job (daily at 2 AM)
+echo &quot;0 2 * * * /usr/local/bin/backup-wireguard-hub.sh&quot; | sudo crontab -
+</code></pre>
+<hr>
+<h2>12. Testing Strategy</h2>
+<h3>12.1 Unit Tests</h3>
+<p><strong>TokenService Tests</strong>:</p>
+<pre><code class="language-typescript">describe('TokenService', () =&gt; {
+  test('generateToken creates valid 256-bit token', () =&gt; {
+    const token = TokenService.generateToken({ spokeName: 'test', hubConfig })
+    expect(token.token.length).toBe(43) // 32 bytes base64url
+  })
+
+  test('validateAndMarkUsed prevents token reuse', () =&gt; {
+    const token = TokenService.generateToken({ spokeName: 'test', hubConfig })
+    TokenService.validateAndMarkUsed(token.token) // First use
+
+    expect(() =&gt; TokenService.validateAndMarkUsed(token.token))
+      .toThrow('TOKEN_ALREADY_USED') // Second use fails
+  })
+
+  test('expired tokens are rejected', () =&gt; {
+    // Create token with past expiration
+    const expiredToken = { ...tokenData, expiresAt: new Date('2020-01-01') }
+    db.prepare('INSERT INTO installation_tokens ...').run(expiredToken)
+
+    expect(() =&gt; TokenService.validateAndMarkUsed(expiredToken.token))
+      .toThrow('TOKEN_EXPIRED')
+  })
+})
+</code></pre>
+<p><strong>IPAddressPool Tests</strong>:</p>
+<pre><code class="language-typescript">describe('IPAddressPool', () =&gt; {
+  test('allocates IPs sequentially', () =&gt; {
+    const ip1 = IPAddressPool.getNextAvailableIP('10.0.1.0/24', [])
+    const ip2 = IPAddressPool.getNextAvailableIP('10.0.1.0/24', [ip1])
+
+    expect(ip1).toBe('10.0.1.1/24') // First usable IP
+    expect(ip2).toBe('10.0.1.2/24')
+  })
+
+  test('throws error when pool exhausted', () =&gt; {
+    const usedIPs = Array.from({ length: 254 }, (_, i) =&gt; `10.0.1.${i + 1}/24`)
+
+    expect(() =&gt; IPAddressPool.getNextAvailableIP('10.0.1.0/24', usedIPs))
+      .toThrow('No available IP addresses')
+  })
+})
+</code></pre>
+<h3>12.2 Integration Tests</h3>
+<p><strong>API Endpoint Tests</strong>:</p>
+<pre><code class="language-typescript">describe('POST /api/installation/token', () =&gt; {
+  test('generates token with valid payload', async () =&gt; {
+    const response = await request(app)
+      .post('/api/installation/token')
+      .send({ spokeName: 'test-spoke' })
+      .expect(201)
+
+    expect(response.body).toHaveProperty('token')
+    expect(response.body.token.token.length).toBe(43)
+  })
+})
+
+describe('GET /api/installation/script/:token', () =&gt; {
+  test('returns script for valid unused token', async () =&gt; {
+    const token = await TokenService.generateToken({ spokeName: 'test', hubConfig })
+
+    const response = await request(app)
+      .get(`/api/installation/script/${token.token}?platform=linux`)
+      .expect(200)
+
+    expect(response.text).toContain('#!/bin/bash')
+    expect(response.text).toContain(token.token)
+  })
+
+  test('rejects used token', async () =&gt; {
+    const token = await TokenService.generateToken({ spokeName: 'test', hubConfig })
+    TokenService.validateAndMarkUsed(token.token)
+
+    const response = await request(app)
+      .get(`/api/installation/script/${token.token}?platform=linux`)
+      .expect(410)
+
+    expect(response.body.code).toBe('TOKEN_ALREADY_USED')
+  })
+})
+</code></pre>
+<h3>12.3 Manual Testing (VMs)</h3>
+<p><strong>Test Matrix</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>Version</th>
+<th>Test Cases</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ubuntu</td>
+<td>22.04</td>
+<td>Happy path, expired token, used token, invalid public key</td>
+</tr>
+<tr>
+<td>Debian</td>
+<td>11</td>
+<td>Happy path</td>
+</tr>
+<tr>
+<td>CentOS</td>
+<td>8</td>
+<td>Happy path</td>
+</tr>
+<tr>
+<td>macOS</td>
+<td>13 (Ventura)</td>
+<td>Happy path</td>
+</tr>
+<tr>
+<td>Windows</td>
+<td>11</td>
+<td>Happy path, PowerShell execution policy</td>
+</tr>
+<tr>
+<td>Proxmox VE</td>
+<td>8.1</td>
+<td>Standalone node, 3-node cluster</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Test Procedure</strong>:</p>
+<ol>
+<li>Generate token via dashboard</li>
+<li>Run installation script on VM</li>
+<li>Verify WireGuard interface created</li>
+<li>Verify spoke appears in dashboard as “Active”</li>
+<li>Test connectivity: <code>ping 10.0.1.1</code> (hub)</li>
+<li>Test spoke removal: Delete spoke in dashboard, verify interface removed</li>
+</ol>
+<p><strong>Proxmox-Specific Tests</strong>:</p>
+<ol>
+<li><strong>Standalone Node</strong>: Install on single Proxmox host, verify <code>is_proxmox=true</code>, <code>proxmox_cluster_id=null</code></li>
+<li><strong>3-Node Cluster</strong>: Install on all 3 nodes, verify cluster auto-detected, all nodes grouped in dashboard</li>
+<li><strong>Cluster Communication</strong>: Test ping between nodes over VPN</li>
+<li><strong>VM Migration</strong>: Test live migration of VM between nodes (optional, performance test)</li>
+</ol>
+<hr>
+<h2>13. Operations and Monitoring</h2>
+<h3>13.1 Monitoring Metrics</h3>
+<p><strong>System Metrics</strong> (via Prometheus + Node Exporter):</p>
+<ul>
+<li>CPU usage</li>
+<li>Memory usage</li>
+<li>Disk I/O</li>
+<li>Network throughput</li>
+</ul>
+<p><strong>WireGuard Metrics</strong>:</p>
+<ul>
+<li>Active peer count</li>
+<li>Handshake failures</li>
+<li>Data transfer (RX/TX bytes per peer)</li>
+<li>Last handshake timestamp</li>
+</ul>
+<p><strong>Application Metrics</strong> (Custom):</p>
+<ul>
+<li>Token generation rate</li>
+<li>Token usage rate</li>
+<li>Spoke registration rate</li>
+<li>API request latency</li>
+<li>API error rate</li>
+</ul>
+<h3>13.2 Prometheus Configuration</h3>
+<p><strong>prometheus.yml</strong>:</p>
+<pre><code class="language-yaml">global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'wireguard-hub'
+    static_configs:
+      - targets: ['localhost:9100']  # Node exporter
+      - targets: ['localhost:3000']  # Express app (custom metrics)
+</code></pre>
+<p><strong>Express Metrics Endpoint</strong> (<code>/api/metrics</code>):</p>
+<pre><code class="language-typescript">import { collectDefaultMetrics, register, Counter, Histogram } from 'prom-client'
+
+collectDefaultMetrics()
+
+const tokenGenerationCounter = new Counter({
+  name: 'wireguard_tokens_generated_total',
+  help: 'Total number of installation tokens generated'
+})
+
+const spokeRegistrationCounter = new Counter({
+  name: 'wireguard_spokes_registered_total',
+  help: 'Total number of spokes registered'
+})
+
+const apiRequestDuration = new Histogram({
+  name: 'wireguard_api_request_duration_seconds',
+  help: 'API request duration',
+  labelNames: ['method', 'route', 'status']
+})
+
+// Middleware to track metrics
+app.use((req, res, next) =&gt; {
+  const start = Date.now()
+  res.on('finish', () =&gt; {
+    const duration = (Date.now() - start) / 1000
+    apiRequestDuration.labels(req.method, req.route?.path || req.path, res.statusCode.toString()).observe(duration)
+  })
+  next()
+})
+
+// Metrics endpoint
+app.get('/api/metrics', (req, res) =&gt; {
+  res.set('Content-Type', register.contentType)
+  res.end(register.metrics())
+})
+</code></pre>
+<h3>13.3 Grafana Dashboard</h3>
+<p><strong>Key Panels</strong>:</p>
+<ol>
+<li>
+<p><strong>Hub Overview</strong>:</p>
+<ul>
+<li>Total spokes (gauge)</li>
+<li>Active spokes (gauge)</li>
+<li>WireGuard uptime (uptime metric)</li>
+</ul>
+</li>
+<li>
+<p><strong>Spoke Activity</strong>:</p>
+<ul>
+<li>Spoke registrations over time (time series)</li>
+<li>Handshake failures (counter)</li>
+<li>Average handshake interval (histogram)</li>
+</ul>
+</li>
+<li>
+<p><strong>System Health</strong>:</p>
+<ul>
+<li>CPU usage (line graph)</li>
+<li>Memory usage (line graph)</li>
+<li>Network throughput (area graph)</li>
+</ul>
+</li>
+<li>
+<p><strong>API Performance</strong>:</p>
+<ul>
+<li>Request rate (time series)</li>
+<li>Latency percentiles (p50, p95, p99)</li>
+<li>Error rate (time series)</li>
+</ul>
+</li>
+</ol>
+<h3>13.4 Alerting Rules</h3>
+<p><strong>Critical Alerts</strong>:</p>
+<ul>
+<li>Hub WireGuard interface down</li>
+<li>Database file permissions changed</li>
+<li>
+<blockquote>
+<p>50% of spokes inactive</p>
+</blockquote>
+</li>
+<li>API error rate &gt;5%</li>
+</ul>
+<p><strong>Warning Alerts</strong>:</p>
+<ul>
+<li>Disk space &lt;10%</li>
+<li>Memory usage &gt;80%</li>
+<li>Any Proxmox cluster with &gt;50% nodes offline</li>
+</ul>
+<p><strong>Prometheus Alerting Rules</strong>:</p>
+<pre><code class="language-yaml">groups:
+  - name: wireguard_hub
+    rules:
+      - alert: HubInterfaceDown
+        expr: up{job=&quot;wireguard-hub&quot;} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: &quot;WireGuard hub interface is down&quot;
+
+      - alert: HighSpokeInactiveRate
+        expr: (wireguard_spokes_inactive / wireguard_spokes_total) &gt; 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: &quot;More than 50% of spokes are inactive&quot;
+</code></pre>
+<h3>13.5 Log Management</h3>
+<p><strong>Log Locations</strong>:</p>
+<ul>
+<li><strong>Express API</strong>: <code>journalctl -u wireguard-hub-api -f</code></li>
+<li><strong>WireGuard</strong>: <code>journalctl -u wg-quick@wg0 -f</code></li>
+<li><strong>Nginx</strong>: <code>/var/log/nginx/access.log</code>, <code>/var/log/nginx/error.log</code></li>
+</ul>
+<p><strong>Structured Logging</strong> (Winston):</p>
+<pre><code class="language-typescript">import winston from 'winston'
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [
+    new winston.transports.File({ filename: '/var/log/wireguard-hub/error.log', level: 'error' }),
+    new winston.transports.File({ filename: '/var/log/wireguard-hub/combined.log' }),
+    new winston.transports.Console({ format: winston.format.simple() })
+  ]
+})
+
+// Usage
+logger.info('Token generated', { tokenId: token.id, spokeName: token.spokeName })
+logger.error('Spoke registration failed', { error: err.message, tokenId })
+</code></pre>
+<hr>
+<h2>14. Risk Assessment</h2>
+<h3>14.1 Technical Risks</h3>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Likelihood</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hub server failure</td>
+<td>Medium</td>
+<td>Critical</td>
+<td>Implement HA with standby hub, automated failover</td>
+</tr>
+<tr>
+<td>Database corruption</td>
+<td>Low</td>
+<td>High</td>
+<td>Daily encrypted backups, WAL mode enabled</td>
+</tr>
+<tr>
+<td>WireGuard key compromise</td>
+<td>Low</td>
+<td>Critical</td>
+<td>Secure key storage, encrypted backups, rotation policy</td>
+</tr>
+<tr>
+<td>Token brute force</td>
+<td>Very Low</td>
+<td>Low</td>
+<td>256-bit entropy, rate limiting</td>
+</tr>
+<tr>
+<td>SQLite scalability limits</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>Migrate to PostgreSQL at 1000+ spokes</td>
+</tr>
+<tr>
+<td>Network bandwidth saturation</td>
+<td>Low</td>
+<td>Medium</td>
+<td>Monitor bandwidth, upgrade link as needed</td>
+</tr>
+</tbody>
+</table>
+<h3>14.2 Operational Risks</h3>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Likelihood</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Misconfigured firewall blocks VPN</td>
+<td>Medium</td>
+<td>High</td>
+<td>Automated firewall tests, monitoring</td>
+</tr>
+<tr>
+<td>TLS certificate expiration</td>
+<td>Low</td>
+<td>High</td>
+<td>Certbot auto-renewal, expiration alerts</td>
+</tr>
+<tr>
+<td>Incorrect spoke removal</td>
+<td>Low</td>
+<td>Low</td>
+<td>Confirmation dialog, audit trail</td>
+</tr>
+<tr>
+<td>IP address exhaustion</td>
+<td>Low</td>
+<td>Medium</td>
+<td>Monitor IP usage, plan network expansion</td>
+</tr>
+</tbody>
+</table>
+<h3>14.3 Security Risks</h3>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Likelihood</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stolen installation token</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>24-hour expiration, one-time use, HTTPS required</td>
+</tr>
+<tr>
+<td>Public key impersonation</td>
+<td>Very Low</td>
+<td>Low</td>
+<td>Uniqueness constraint, validation</td>
+</tr>
+<tr>
+<td>Hub admin account compromise</td>
+<td>Low</td>
+<td>Critical</td>
+<td>Implement authentication (future), 2FA, audit logs</td>
+</tr>
+<tr>
+<td>DDoS attack on hub</td>
+<td>Medium</td>
+<td>High</td>
+<td>Rate limiting, Cloudflare DDoS protection</td>
+</tr>
+</tbody>
+</table>
+<h3>14.4 Scalability Risks</h3>
+<p><strong>SQLite Limitations</strong>:</p>
+<ul>
+<li><strong>Concurrent Writes</strong>: Single-writer limitation</li>
+<li><strong>Database Size</strong>: Practical limit ~1TB (but performance degrades at 100GB+)</li>
+<li><strong>Connection Pooling</strong>: Not supported</li>
+</ul>
+<p><strong>Mitigation</strong>: Migrate to PostgreSQL when:</p>
+<ul>
+<li>Spoke count exceeds 1000</li>
+<li>API request rate exceeds 100 req/s</li>
+<li>Database size exceeds 10GB</li>
+</ul>
+<hr>
+<h2>15. Implementation Roadmap</h2>
+<h3>Week 1: Backend Core (Days 1-5)</h3>
+<p><strong>Day 1-2: Database and Core Services</strong></p>
+<ul>
+<li>✅ Database schema implementation</li>
+<li>✅ TokenService implementation</li>
+<li>✅ IPAddressPool implementation</li>
+<li>[ ] WireGuardService implementation</li>
+<li>[ ] ScriptGenerator implementation</li>
+</ul>
+<p><strong>Day 3-4: API Controllers and Routes</strong></p>
+<ul>
+<li>[ ] HubController (initialize, config, status)</li>
+<li>[ ] InstallationController (token generation, script serving)</li>
+<li>[ ] SpokeController (registration, list, delete)</li>
+<li>[ ] ProxmoxController (cluster management)</li>
+<li>[ ] Express server setup with middleware</li>
+</ul>
+<p><strong>Day 5: Testing</strong></p>
+<ul>
+<li>[ ] Unit tests for all services</li>
+<li>[ ] Integration tests for API endpoints</li>
+<li>[ ] Security testing (token validation, SQL injection)</li>
+</ul>
+<h3>Week 2: Installation Scripts (Days 6-10)</h3>
+<p><strong>Day 6-7: Linux and Proxmox Scripts</strong></p>
+<ul>
+<li>[ ] Linux installation script template</li>
+<li>[ ] Proxmox installation script with cluster detection</li>
+<li>[ ] Test on Ubuntu 22.04, Debian 11, CentOS 8</li>
+</ul>
+<p><strong>Day 8: macOS Script</strong></p>
+<ul>
+<li>[ ] macOS installation script template</li>
+<li>[ ] launchd plist configuration</li>
+<li>[ ] Test on macOS Ventura</li>
+</ul>
+<p><strong>Day 9: Windows Script</strong></p>
+<ul>
+<li>[ ] PowerShell installation script</li>
+<li>[ ] Chocolatey integration</li>
+<li>[ ] Test on Windows 11</li>
+</ul>
+<p><strong>Day 10: Script Testing</strong></p>
+<ul>
+<li>[ ] VM testing matrix (all platforms)</li>
+<li>[ ] Error handling verification</li>
+<li>[ ] Rollback testing</li>
+</ul>
+<h3>Week 3: Frontend Components (Days 11-15)</h3>
+<p><strong>Day 11-12: Core Components</strong></p>
+<ul>
+<li>[ ] HubContext state management</li>
+<li>[ ] HubInitializer wizard</li>
+<li>[ ] SpokeManager component</li>
+<li>[ ] InstallationTokenGenerator</li>
+</ul>
+<p><strong>Day 13-14: Proxmox UI</strong></p>
+<ul>
+<li>[ ] ProxmoxClusterView component</li>
+<li>[ ] Cluster grouping logic</li>
+<li>[ ] Status indicators</li>
+<li>[ ] InstallationInstructions with Proxmox tab</li>
+</ul>
+<p><strong>Day 15: UI Polish</strong></p>
+<ul>
+<li>[ ] Styling with TailwindCSS</li>
+<li>[ ] Responsive design</li>
+<li>[ ] Loading states and error handling</li>
+<li>[ ] Copy-to-clipboard functionality</li>
+</ul>
+<h3>Week 4: Integration and Testing (Days 16-20)</h3>
+<p><strong>Day 16-17: End-to-End Testing</strong></p>
+<ul>
+<li>[ ] Complete provisioning flow (Linux)</li>
+<li>[ ] Complete provisioning flow (Proxmox cluster)</li>
+<li>[ ] Token expiration testing</li>
+<li>[ ] Token reuse prevention testing</li>
+</ul>
+<p><strong>Day 18-19: Security Testing</strong></p>
+<ul>
+<li>[ ] Penetration testing (token theft scenarios)</li>
+<li>[ ] Rate limiting verification</li>
+<li>[ ] HTTPS enforcement</li>
+<li>[ ] Input validation testing</li>
+</ul>
+<p><strong>Day 20: Performance Testing</strong></p>
+<ul>
+<li>[ ] Load testing (100 concurrent token generations)</li>
+<li>[ ] Database performance testing</li>
+<li>[ ] WireGuard scalability testing (100+ peers)</li>
+</ul>
+<h3>Week 5: Deployment and Documentation (Days 21-25)</h3>
+<p><strong>Day 21-22: Production Deployment</strong></p>
+<ul>
+<li>[ ] Deploy to production server</li>
+<li>[ ] Configure Nginx reverse proxy</li>
+<li>[ ] Set up TLS certificates</li>
+<li>[ ] Configure systemd services</li>
+</ul>
+<p><strong>Day 23-24: Monitoring and Operations</strong></p>
+<ul>
+<li>[ ] Prometheus metrics implementation</li>
+<li>[ ] Grafana dashboards</li>
+<li>[ ] Alerting rules configuration</li>
+<li>[ ] Backup automation</li>
+</ul>
+<p><strong>Day 25: Documentation and Handoff</strong></p>
+<ul>
+<li>[ ] User guide (dashboard usage)</li>
+<li>[ ] Operations guide (troubleshooting)</li>
+<li>[ ] API documentation</li>
+<li>[ ] Chief architect review and approval</li>
+</ul>
+<hr>
+<h2>Conclusion</h2>
+<p>This architecture provides a secure, scalable, and user-friendly solution for hub-and-spoke WireGuard VPN management with special focus on Proxmox multi-cluster deployments.</p>
+<h3>Key Strengths</h3>
+<ol>
+<li><strong>Security-First Design</strong>: Zero-trust key generation, one-time-use tokens, atomic validation</li>
+<li><strong>Multi-Platform Support</strong>: Linux, macOS, Windows, Proxmox VE with auto-detection</li>
+<li><strong>Proxmox Integration</strong>: Auto-cluster detection, hierarchical visualization, multi-datacenter support</li>
+<li><strong>Developer Experience</strong>: TypeScript throughout, comprehensive type definitions, modular architecture</li>
+<li><strong>Operations-Ready</strong>: Monitoring, backups, logging, alerting built-in</li>
+</ol>
+<h3>Next Steps</h3>
+<ol>
+<li><strong>Chief Architect Review</strong>: Obtain approval on this architecture document</li>
+<li><strong>Implementation</strong>: Follow 5-week roadmap</li>
+<li><strong>Testing</strong>: Comprehensive testing on all platforms</li>
+<li><strong>Deployment</strong>: Production deployment with monitoring</li>
+<li><strong>Iteration</strong>: Gather user feedback, implement enhancements</li>
+</ol>
+<h3>Future Enhancements (Post-MVP)</h3>
+<ul>
+<li><strong>Authentication</strong>: Add login system for dashboard (OAuth, SAML)</li>
+<li><strong>RBAC</strong>: Role-based access control (admin, viewer, operator)</li>
+<li><strong>Spoke-to-Spoke Routing</strong>: Optional mesh networking</li>
+<li><strong>IPv6 Support</strong>: Dual-stack configuration</li>
+<li><strong>DNS Server</strong>: Built-in DNS for spoke name resolution</li>
+<li><strong>Container Support</strong>: Docker/Podman integration</li>
+<li><strong>Terraform Provider</strong>: Infrastructure-as-code integration</li>
+</ul>
+<hr>
+<p><strong>Document Status</strong>: Ready for Chief Architect Review
+<strong>Last Updated</strong>: December 22, 2025
+<strong>Prepared By</strong>: Claude Code AI
+<strong>Version</strong>: 1.0</p>
+
+</body>
+</html>
+  

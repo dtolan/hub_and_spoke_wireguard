@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm init:*)",
+      "Bash(dir \"c:\\\\github\\\\hub_and_spoke_wireguard\")",
+      "Bash(dir:*)"
+    ]
+  }
+}

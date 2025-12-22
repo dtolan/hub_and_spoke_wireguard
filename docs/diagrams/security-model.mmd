@@ -1,0 +1,79 @@
+%% Security Model & Threat Mitigation
+
+graph TB
+    subgraph "Threat Actors"
+        T1[External Attacker<br/>Internet-based]
+        T2[Malicious Insider<br/>Stolen Token]
+        T3[MITM Attacker<br/>Network Intercept]
+    end
+
+    subgraph "Attack Vectors"
+        A1[Token Theft]
+        A2[Token Brute Force]
+        A3[Token Replay]
+        A4[Hub Key Compromise]
+        A5[Spoke Impersonation]
+        A6[Script Tampering]
+    end
+
+    subgraph "Security Controls"
+        C1[HTTPS/TLS 1.3<br/>Transport Encryption]
+        C2[256-bit Token Entropy<br/>2^256 combinations]
+        C3[24-hour Expiration<br/>Limited Time Window]
+        C4[Atomic DB Update<br/>One-time Use Enforcement]
+        C5[Hub Key Encryption<br/>AES-256 at Rest]
+        C6[Public Key Uniqueness<br/>DB Constraint]
+        C7[Code Signing<br/>Script Integrity]
+        C8[Rate Limiting<br/>10 tokens/hour/IP]
+        C9[CORS Policy<br/>Origin Restriction]
+        C10[Zero-Trust Keys<br/>Generated on Spoke]
+    end
+
+    subgraph "Assets Protected"
+        AS1[Hub Private Key<br/>CRITICAL]
+        AS2[Installation Tokens<br/>LIMITED SCOPE]
+        AS3[Spoke Private Keys<br/>LOCAL ONLY]
+        AS4[Network Topology<br/>DATABASE]
+    end
+
+    T1 --> A1
+    T1 --> A2
+    T1 --> A6
+    T2 --> A1
+    T2 --> A3
+    T3 --> A1
+    T3 --> A6
+
+    A1 -->|Mitigated by| C1
+    A1 -->|Mitigated by| C3
+    A2 -->|Mitigated by| C2
+    A2 -->|Mitigated by| C8
+    A3 -->|Mitigated by| C4
+    A4 -->|Mitigated by| C5
+    A5 -->|Mitigated by| C6
+    A6 -->|Mitigated by| C7
+
+    C1 --> AS2
+    C2 --> AS2
+    C3 --> AS2
+    C4 --> AS2
+    C5 --> AS1
+    C6 --> AS3
+    C7 --> AS2
+    C8 --> AS2
+    C9 --> AS4
+    C10 --> AS3
+
+    style T1 fill:#f44336,color:#fff
+    style T2 fill:#ff9800,color:#fff
+    style T3 fill:#ff5722,color:#fff
+    style C1 fill:#4caf50,color:#fff
+    style C2 fill:#4caf50,color:#fff
+    style C3 fill:#4caf50,color:#fff
+    style C4 fill:#4caf50,color:#fff
+    style C5 fill:#2196f3,color:#fff
+    style C6 fill:#4caf50,color:#fff
+    style C10 fill:#2196f3,color:#fff
+    style AS1 fill:#d32f2f,color:#fff
+    style AS2 fill:#ffa726,color:#fff
+    style AS3 fill:#66bb6a,color:#fff

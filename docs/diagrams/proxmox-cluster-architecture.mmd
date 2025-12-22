@@ -1,0 +1,68 @@
+%% Proxmox Multi-Cluster Architecture
+
+graph TB
+    subgraph "Hub (Central)"
+        HUB[WireGuard Hub<br/>10.0.1.1<br/>203.0.113.5:51820]
+        DB[(Database<br/>Cluster Registry)]
+    end
+
+    subgraph "Datacenter 1: Production"
+        subgraph "Cluster: dc1-prod"
+            PVE1[pve1.dc1<br/>10.0.1.10<br/>Proxmox Node]
+            PVE2[pve2.dc1<br/>10.0.1.11<br/>Proxmox Node]
+            PVE3[pve3.dc1<br/>10.0.1.12<br/>Proxmox Node]
+            CEPH1[Ceph Storage<br/>Shared across cluster]
+        end
+        PVE1 & PVE2 & PVE3 -.->|Cluster Traffic| CEPH1
+        PVE1 <-->|Corosync| PVE2
+        PVE2 <-->|Corosync| PVE3
+        PVE3 <-->|Corosync| PVE1
+    end
+
+    subgraph "Datacenter 2: Backup"
+        subgraph "Cluster: dc2-backup"
+            PVE4[pve1.dc2<br/>10.0.1.20<br/>Proxmox Node]
+            PVE5[pve2.dc2<br/>10.0.1.21<br/>Proxmox Node]
+            NFS[NFS Storage]
+        end
+        PVE4 & PVE5 -.->|Storage| NFS
+        PVE4 <-->|Corosync| PVE5
+    end
+
+    subgraph "Edge Site"
+        subgraph "Cluster: edge-site1"
+            PVE6[pve1.edge<br/>10.0.1.30<br/>Proxmox Node]
+            PVE7[pve2.edge<br/>10.0.1.31<br/>Proxmox Node]
+        end
+        PVE6 <-->|Corosync| PVE7
+    end
+
+    subgraph "Standalone Nodes"
+        PVE8[pve-standalone<br/>10.0.1.50<br/>No Cluster]
+    end
+
+    HUB -.->|WireGuard VPN| PVE1
+    HUB -.->|WireGuard VPN| PVE2
+    HUB -.->|WireGuard VPN| PVE3
+    HUB -.->|WireGuard VPN| PVE4
+    HUB -.->|WireGuard VPN| PVE5
+    HUB -.->|WireGuard VPN| PVE6
+    HUB -.->|WireGuard VPN| PVE7
+    HUB -.->|WireGuard VPN| PVE8
+
+    HUB --> DB
+
+    Note1[Each node detects cluster<br/>membership via pvecm status]
+    Note2[All nodes register individually<br/>with unique IP & keys]
+    Note3[Dashboard groups nodes<br/>by cluster for visibility]
+
+    style HUB fill:#f44336,color:#fff
+    style PVE1 fill:#4caf50,color:#fff
+    style PVE2 fill:#4caf50,color:#fff
+    style PVE3 fill:#4caf50,color:#fff
+    style PVE4 fill:#2196f3,color:#fff
+    style PVE5 fill:#2196f3,color:#fff
+    style PVE6 fill:#ff9800,color:#fff
+    style PVE7 fill:#ff9800,color:#fff
+    style PVE8 fill:#9e9e9e,color:#fff
+    style DB fill:#e0e0e0

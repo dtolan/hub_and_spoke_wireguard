@@ -1,0 +1,56 @@
+%% Spoke Provisioning Sequence Diagram
+
+sequenceDiagram
+    participant Admin as Admin<br/>(Browser)
+    participant Dashboard as React<br/>Dashboard
+    participant API as Express<br/>API
+    participant DB as SQLite<br/>Database
+    participant WG as WireGuard<br/>Service
+    participant Spoke as Spoke<br/>Device
+
+    Admin->>Dashboard: 1. Click "Add Spoke"<br/>Name: "laptop-001"
+    Dashboard->>API: 2. POST /api/installation/token<br/>{spokeName: "laptop-001"}
+
+    API->>API: 3. Generate 256-bit token<br/>crypto.randomBytes(32)
+    API->>DB: 4. Allocate next IP<br/>10.0.1.5/24
+    API->>DB: 5. INSERT token record<br/>(unused, expires 24h)
+    DB-->>API: Token created
+
+    API-->>Dashboard: 6. Return token + install cmd
+    Dashboard-->>Admin: 7. Show installation command<br/>curl https://hub/.../TOKEN | bash
+
+    Admin->>Spoke: 8. SSH to spoke device<br/>Execute install command
+
+    Spoke->>API: 9. GET /api/installation/script/TOKEN?platform=linux
+    API->>DB: 10. Validate token<br/>(exists, unused, not expired)
+    API->>DB: 11. Mark token as USED<br/>(atomic UPDATE)
+    DB-->>API: Token marked used
+    API-->>Spoke: 12. Return rendered script<br/>(with embedded config)
+
+    Spoke->>Spoke: 13. Install WireGuard<br/>apt-get install wireguard
+    Spoke->>Spoke: 14. Generate keys locally<br/>wg genkey | wg pubkey
+    Spoke->>Spoke: 15. Private key NEVER leaves device
+
+    Spoke->>API: 16. POST /api/spoke/register<br/>{token, publicKey, os}
+    API->>DB: 17. Validate token again<br/>(prevent replay)
+    API->>DB: 18. Check public key unique
+    API->>DB: 19. INSERT spoke registration
+    DB-->>API: Spoke registered
+
+    API->>WG: 20. wg set wg0 peer <publicKey><br/>allowed-ips 10.0.1.5/32
+    WG-->>API: Peer added
+    API->>WG: 21. wg-quick save wg0
+    WG-->>API: Config saved
+
+    API-->>Spoke: 22. Registration successful
+
+    Spoke->>Spoke: 23. Create /etc/wireguard/wg0.conf
+    Spoke->>Spoke: 24. systemctl enable wg-quick@wg0
+    Spoke->>Spoke: 25. systemctl start wg-quick@wg0
+
+    Spoke->>WG: 26. Establish VPN tunnel
+    WG->>Spoke: 27. Handshake complete
+
+    Spoke-->>Admin: 28. ✅ Installation complete<br/>VPN IP: 10.0.1.5
+
+    Note over Admin,Spoke: Total time: ~30-60 seconds
