@@ -62,7 +62,8 @@ export class TokenService {
       createdAt,
       expiresAt,
       used: false,
-      hubEndpoint: hubConfig.endpoint,
+      hubPublicEndpoint: hubConfig.publicEndpoint,
+      hubPrivateEndpoint: hubConfig.privateEndpoint,
       hubPublicKey: hubConfig.publicKey,
       networkCIDR: hubConfig.networkCIDR,
       dns: hubConfig.dns,
@@ -73,9 +74,9 @@ export class TokenService {
     const stmt = db.prepare(`
       INSERT INTO installation_tokens (
         id, token, spoke_id, spoke_name, allowed_ips,
-        created_at, expires_at, used, hub_endpoint,
-        hub_public_key, network_cidr, dns, persistent_keepalive
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at, expires_at, used, hub_public_endpoint, hub_private_endpoint,
+        hub_public_key, network_cidr, dns, persistent_keepalive, use_private_endpoint
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     stmt.run(
@@ -87,11 +88,13 @@ export class TokenService {
       tokenRecord.createdAt.toISOString(),
       tokenRecord.expiresAt.toISOString(),
       tokenRecord.used ? 1 : 0,
-      tokenRecord.hubEndpoint,
+      tokenRecord.hubPublicEndpoint,
+      tokenRecord.hubPrivateEndpoint || null,
       tokenRecord.hubPublicKey,
       tokenRecord.networkCIDR,
       tokenRecord.dns ? JSON.stringify(tokenRecord.dns) : null,
-      tokenRecord.persistentKeepalive
+      tokenRecord.persistentKeepalive,
+      0  // use_private_endpoint defaults to 0 (false) - can be configured later
     )
 
     return tokenRecord
@@ -216,11 +219,13 @@ export class TokenService {
       expiresAt: new Date(row.expires_at),
       used: Boolean(row.used),
       usedAt: row.used_at ? new Date(row.used_at) : undefined,
-      hubEndpoint: row.hub_endpoint,
+      hubPublicEndpoint: row.hub_public_endpoint,
+      hubPrivateEndpoint: row.hub_private_endpoint || undefined,
       hubPublicKey: row.hub_public_key,
       networkCIDR: row.network_cidr,
       dns: row.dns ? JSON.parse(row.dns) : undefined,
       persistentKeepalive: row.persistent_keepalive,
+      usePrivateEndpoint: Boolean(row.use_private_endpoint),
     }
   }
 }
