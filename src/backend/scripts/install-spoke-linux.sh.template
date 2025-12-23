@@ -29,19 +29,83 @@ detect_endpoint() {
     PRIVATE_HOST=$(echo "$HUB_PRIVATE_ENDPOINT" | cut -d: -f1)
     PRIVATE_PORT=$(echo "$HUB_PRIVATE_ENDPOINT" | cut -d: -f2)
 
-    # Test if private endpoint is reachable (timeout 2 seconds)
-    if timeout 2 bash -c "cat < /dev/null > /dev/tcp/$PRIVATE_HOST/$PRIVATE_PORT" 2>/dev/null; then
-      echo "✓ Private endpoint reachable: $HUB_PRIVATE_ENDPOINT"
-      HUB_ENDPOINT="$HUB_PRIVATE_ENDPOINT"
-      return
+    # Test if private endpoint is reachable via UDP (WireGuard uses UDP)
+    # Use nc (netcat) if available, otherwise skip UDP test and try anyway
+    if command -v nc &> /dev/null; then
+      if timeout 2 nc -u -z -w 1 "$PRIVATE_HOST" "$PRIVATE_PORT" &>/dev/null; then
+        echo "✓ Private endpoint reachable: $HUB_PRIVATE_ENDPOINT"
+        HUB_ENDPOINT="$HUB_PRIVATE_ENDPOINT"
+        return
+      else
+        echo "⚠ Private endpoint not reachable via UDP: $HUB_PRIVATE_ENDPOINT"
+      fi
     else
-      echo "⚠ Private endpoint not reachable: $HUB_PRIVATE_ENDPOINT"
+      # No nc available, check if we can at least resolve/ping the host
+      if ping -c 1 -W 2 "$PRIVATE_HOST" &>/dev/null; then
+        echo "✓ Private endpoint host reachable (UDP test skipped - nc not available): $HUB_PRIVATE_ENDPOINT"
+        HUB_ENDPOINT="$HUB_PRIVATE_ENDPOINT"
+        return
+      else
+        echo "⚠ Private endpoint host not reachable: $HUB_PRIVATE_ENDPOINT"
+      fi
     fi
   fi
 
-  # Fall back to public endpoint
-  echo "✓ Using public endpoint: $HUB_PUBLIC_ENDPOINT"
-  HUB_ENDPOINT="$HUB_PUBLIC_ENDPOINT"
+  # Test public endpoint before accepting it
+  PUBLIC_HOST=$(echo "$HUB_PUBLIC_ENDPOINT" | cut -d: -f1)
+  PUBLIC_PORT=$(echo "$HUB_PUBLIC_ENDPOINT" | cut -d: -f2)
+
+  echo "Testing public endpoint: $HUB_PUBLIC_ENDPOINT"
+
+  # First check if hostname resolves
+  if ! getent hosts "$PUBLIC_HOST" &>/dev/null && ! host "$PUBLIC_HOST" &>/dev/null; then
+    echo ""
+    echo "❌ ERROR: Cannot resolve hostname '$PUBLIC_HOST'"
+    echo ""
+    echo "Troubleshooting steps:"
+    echo "  1. Check DNS resolution:"
+    echo "     nslookup $PUBLIC_HOST"
+    echo ""
+    echo "  2. The hub needs to use an IP address instead of a domain name"
+    echo "     Update hub configuration to use your public IP instead"
+    echo "     Example: 203.0.113.5:51820 instead of testing.prfmv.com:51820"
+    echo ""
+    echo "  3. Alternatively, set up proper DNS for '$PUBLIC_HOST'"
+    echo ""
+    exit 1
+  fi
+
+  # Test UDP connectivity if nc is available
+  if command -v nc &> /dev/null; then
+    if timeout 2 nc -u -z -w 1 "$PUBLIC_HOST" "$PUBLIC_PORT" &>/dev/null; then
+      echo "✓ Public endpoint reachable: $HUB_PUBLIC_ENDPOINT"
+      HUB_ENDPOINT="$HUB_PUBLIC_ENDPOINT"
+    else
+      echo ""
+      echo "⚠ Warning: Cannot verify UDP connectivity to $HUB_PUBLIC_ENDPOINT"
+      echo "  This may be normal if ICMP/probes are blocked by firewall"
+      echo "  Proceeding anyway - WireGuard will attempt connection"
+      echo ""
+      HUB_ENDPOINT="$HUB_PUBLIC_ENDPOINT"
+    fi
+  else
+    # No nc, just check if host is reachable
+    if ping -c 1 -W 2 "$PUBLIC_HOST" &>/dev/null; then
+      echo "✓ Public endpoint host reachable (UDP test skipped - nc not available): $HUB_PUBLIC_ENDPOINT"
+      HUB_ENDPOINT="$HUB_PUBLIC_ENDPOINT"
+    else
+      echo ""
+      echo "❌ ERROR: Cannot reach public endpoint at $HUB_PUBLIC_ENDPOINT"
+      echo ""
+      echo "Troubleshooting steps:"
+      echo "  1. Check firewall rules on hub (port $PUBLIC_PORT/udp must be open)"
+      echo "  2. Verify the hub WireGuard service is running:"
+      echo "     systemctl status wg-quick@wg0"
+      echo "  3. Check network connectivity to the hub"
+      echo ""
+      exit 1
+    fi
+  fi
 }
 
 detect_endpoint
