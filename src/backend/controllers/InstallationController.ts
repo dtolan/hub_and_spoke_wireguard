@@ -245,8 +245,10 @@ export class InstallationController {
       }
 
       // Build callback URL (for spoke registration)
+      // Use the same host that served this script request (frontend/proxy)
+      // This way the backend stays on localhost and all API calls go through the frontend proxy
       const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'
-      const host = req.get('host')
+      const host = req.get('host') // This will be the frontend host (e.g., 192.168.1.15:5173 or test.prfmv.com)
       const callbackUrl = `${protocol}://${host}/api/spoke/register`
 
       // Generate script from template
