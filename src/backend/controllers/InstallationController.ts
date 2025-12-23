@@ -55,7 +55,7 @@ export class InstallationController {
         updatedAt: new Date(hubConfig.updated_at as string),
       }
 
-      // Generate token
+      // Generate token (endpoint selection is now automatic in the installation script)
       const token = TokenService.generateToken({
         spokeName,
         hubConfig: config,

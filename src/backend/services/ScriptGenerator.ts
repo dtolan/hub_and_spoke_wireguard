@@ -24,7 +24,8 @@ export type Platform = 'linux' | 'macos' | 'windows' | 'proxmox'
  */
 interface TemplateVariables {
   TOKEN: string
-  HUB_ENDPOINT: string
+  HUB_PUBLIC_ENDPOINT: string
+  HUB_PRIVATE_ENDPOINT: string
   HUB_PUBLIC_KEY: string
   SPOKE_IP: string
   NETWORK_CIDR: string
@@ -121,15 +122,11 @@ export class ScriptGenerator {
     // Load template
     const template = this.loadTemplate(platform)
 
-    // Determine which endpoint to use (prefer private if available and usePrivateEndpoint flag is set)
-    const hubEndpoint = tokenData.usePrivateEndpoint && tokenData.hubPrivateEndpoint
-      ? tokenData.hubPrivateEndpoint
-      : tokenData.hubPublicEndpoint
-
-    // Prepare variables for replacement
+    // Prepare variables for replacement - include both endpoints so script can auto-detect
     const variables: TemplateVariables = {
       TOKEN: tokenData.token,
-      HUB_ENDPOINT: hubEndpoint,
+      HUB_PUBLIC_ENDPOINT: tokenData.hubPublicEndpoint,
+      HUB_PRIVATE_ENDPOINT: tokenData.hubPrivateEndpoint || '',
       HUB_PUBLIC_KEY: tokenData.hubPublicKey,
       SPOKE_IP: tokenData.allowedIPs[0], // First IP is the spoke's address
       NETWORK_CIDR: tokenData.networkCIDR,
