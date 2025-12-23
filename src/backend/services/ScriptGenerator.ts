@@ -1,13 +1,18 @@
 import fs from 'fs'
 import path from 'path'
+import { fileURLToPath } from 'url'
 import type { InstallationToken } from '../../types/index.js'
+
+// ES module equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 /**
  * Script templates directory
- * In development: src/backend/scripts
- * In production: dist/backend/scripts
+ * In development: src/backend/services/../scripts = src/backend/scripts
+ * In production: dist/backend/backend/services/../scripts = dist/backend/backend/scripts
  */
-const TEMPLATES_DIR = path.join(__dirname, 'scripts')
+const TEMPLATES_DIR = path.join(__dirname, '..', 'scripts')
 
 /**
  * Supported platform types
