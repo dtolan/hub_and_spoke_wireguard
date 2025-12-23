@@ -17,7 +17,9 @@
       "Bash(git push)",
       "Bash(npx tailwindcss init -p)",
       "Bash(npm run type-check:*)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

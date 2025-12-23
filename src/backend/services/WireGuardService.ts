@@ -35,6 +35,33 @@ export class WireGuardService {
   private static readonly CONFIG_PATH = '/etc/wireguard/wg0.conf'
 
   /**
+   * Parse relative time string from WireGuard output
+   * @param timeStr e.g., "1 minute, 30 seconds ago" or "2 hours, 15 minutes, 10 seconds ago"
+   * @returns Date object representing when the handshake occurred
+   */
+  private static parseRelativeTime(timeStr: string): Date {
+    // Remove " ago" suffix
+    const cleaned = timeStr.replace(/ ago$/, '').trim()
+
+    // Parse time components
+    let totalSeconds = 0
+
+    // Match patterns like "1 day", "2 hours", "30 seconds"
+    const dayMatch = cleaned.match(/(\d+)\s+days?/)
+    const hourMatch = cleaned.match(/(\d+)\s+hours?/)
+    const minuteMatch = cleaned.match(/(\d+)\s+minutes?/)
+    const secondMatch = cleaned.match(/(\d+)\s+seconds?/)
+
+    if (dayMatch) totalSeconds += parseInt(dayMatch[1], 10) * 86400
+    if (hourMatch) totalSeconds += parseInt(hourMatch[1], 10) * 3600
+    if (minuteMatch) totalSeconds += parseInt(minuteMatch[1], 10) * 60
+    if (secondMatch) totalSeconds += parseInt(secondMatch[1], 10)
+
+    // Calculate actual timestamp (current time minus elapsed time)
+    return new Date(Date.now() - totalSeconds * 1000)
+  }
+
+  /**
    * Execute a command and return its output
    */
   private static async executeCommand(
@@ -301,10 +328,15 @@ AllowedIPs = ${spoke.allowedIPs.join(', ')}
         }
 
         if (trimmed.startsWith('latest handshake:')) {
-          // Parse relative time (e.g., "1 minute, 30 seconds ago")
-          // For now, just store current time minus a rough estimate
-          // TODO: Implement proper relative time parsing
-          currentPeer.lastHandshake = new Date()
+          const timeStr = trimmed.split(':').slice(1).join(':').trim()
+
+          // Skip if no handshake yet (shows "(none)" or "0 seconds")
+          if (timeStr === '(none)' || timeStr.startsWith('0 seconds')) {
+            currentPeer.lastHandshake = undefined
+          } else {
+            // Parse relative time (e.g., "1 minute, 30 seconds ago")
+            currentPeer.lastHandshake = this.parseRelativeTime(timeStr)
+          }
         }
 
         if (trimmed.startsWith('transfer:')) {

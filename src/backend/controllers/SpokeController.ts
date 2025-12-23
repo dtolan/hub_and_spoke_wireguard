@@ -241,6 +241,35 @@ export class SpokeController {
         proxmoxClusterName: (row.proxmox_cluster_name as string) || undefined,
       }))
 
+      // Enhance with live WireGuard status
+      try {
+        const wgStatus = await WireGuardService.getStatus()
+
+        for (const spoke of spokes) {
+          const peer = wgStatus.peers.find((p) => p.publicKey === spoke.publicKey)
+
+          if (peer) {
+            spoke.lastHandshake = peer.lastHandshake
+            // Update status based on handshake
+            if (peer.lastHandshake) {
+              const minutesSinceHandshake =
+                (Date.now() - peer.lastHandshake.getTime()) / 1000 / 60
+
+              if (minutesSinceHandshake < 3) {
+                spoke.status = 'active'
+              } else if (minutesSinceHandshake < 10) {
+                spoke.status = 'pending'
+              } else {
+                spoke.status = 'inactive'
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to get live WireGuard status for spoke list:', error)
+        // Continue with database values if WireGuard query fails
+      }
+
       res.json({ spokes })
     } catch (error) {
       console.error('Error listing spokes:', error)
