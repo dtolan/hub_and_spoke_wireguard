@@ -19,7 +19,7 @@ import proxmoxRoutes from './routes/proxmox.routes.js'
 dotenv.config()
 
 const app = express()
-const PORT = process.env.PORT || 3000
+const PORT = parseInt(process.env.PORT || '3000', 10)
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*'
 
 /**
@@ -107,13 +107,14 @@ app.use(errorHandler)
 /**
  * Start server
  */
-app.listen(PORT, () => {
+const HOST = process.env.HOST || '0.0.0.0'
+app.listen(PORT, HOST, () => {
   console.log('')
   console.log('═══════════════════════════════════════════════════════')
   console.log('  Hub-and-Spoke WireGuard VPN Management Server')
   console.log('═══════════════════════════════════════════════════════')
   console.log('')
-  console.log(`  Server running on port ${PORT}`)
+  console.log(`  Server running on http://${HOST}:${PORT}`)
   console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`)
   console.log(`  CORS Origin: ${CORS_ORIGIN}`)
   console.log('')
