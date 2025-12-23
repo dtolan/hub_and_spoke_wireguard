@@ -207,10 +207,10 @@ export class InstallationController {
         return
       }
 
-      // Validate and mark token as used (atomic operation)
+      // Validate token (don't mark as used yet - that happens during spoke registration)
       let tokenData: InstallationToken
       try {
-        tokenData = TokenService.validateAndMarkUsed(token)
+        tokenData = TokenService.validateToken(token)
       } catch (error) {
         if (error instanceof Error) {
           if (error.message === 'TOKEN_NOT_FOUND') {
