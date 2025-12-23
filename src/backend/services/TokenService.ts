@@ -98,6 +98,32 @@ export class TokenService {
   }
 
   /**
+   * Validate token without marking as used
+   */
+  static validateToken(token: string): InstallationToken {
+    const stmt = db.prepare(`
+      SELECT * FROM installation_tokens WHERE token = ?
+    `)
+    const row = stmt.get(token) as any
+
+    if (!row) {
+      throw new Error('TOKEN_NOT_FOUND')
+    }
+
+    const tokenData = this.rowToToken(row)
+
+    if (tokenData.used) {
+      throw new Error('TOKEN_ALREADY_USED')
+    }
+
+    if (new Date(tokenData.expiresAt) < new Date()) {
+      throw new Error('TOKEN_EXPIRED')
+    }
+
+    return tokenData
+  }
+
+  /**
    * Validate token and mark as used (atomic operation)
    */
   static validateAndMarkUsed(token: string): InstallationToken {

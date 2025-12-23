@@ -1,0 +1,344 @@
+#!/bin/bash
+set -e
+
+# Hub-and-Spoke WireGuard Installation Script - Proxmox VE
+# This script installs WireGuard on Proxmox VE with automatic cluster detection
+
+# Embedded configuration (replaced by ScriptGenerator)
+TOKEN="{{TOKEN}}"
+HUB_ENDPOINT="{{HUB_ENDPOINT}}"
+HUB_PUBLIC_KEY="{{HUB_PUBLIC_KEY}}"
+SPOKE_IP="{{SPOKE_IP}}"
+NETWORK_CIDR="{{NETWORK_CIDR}}"
+DNS_SERVERS="{{DNS_SERVERS}}"
+CALLBACK_URL="{{CALLBACK_URL}}"
+SPOKE_NAME="{{SPOKE_NAME}}"
+
+echo "===== Proxmox VE WireGuard Installation ====="
+echo "Spoke: $SPOKE_NAME"
+echo "Allocated IP: $SPOKE_IP"
+echo ""
+
+# Detect Proxmox environment
+detect_proxmox() {
+  if ! command -v pveversion &> /dev/null; then
+    echo "Error: This script is designed for Proxmox VE"
+    echo "Detected OS: $(uname -a)"
+    echo ""
+    echo "If this is a regular Linux system, please use the Linux installation script instead."
+    exit 1
+  fi
+
+  PVE_VERSION=$(pveversion | head -n1 | awk '{print $2}')
+  echo "✓ Detected Proxmox VE version: $PVE_VERSION"
+}
+
+# Check cluster status
+detect_cluster() {
+  echo "Checking cluster configuration..."
+
+  # Try to get cluster status
+  CLUSTER_STATUS=$(pvecm status 2>/dev/null || echo "not_clustered")
+
+  if echo "$CLUSTER_STATUS" | grep -q "Cluster information"; then
+    IS_CLUSTERED=true
+    CLUSTER_NAME=$(echo "$CLUSTER_STATUS" | grep "Name:" | awk '{print $2}')
+    NODE_NAME=$(hostname)
+
+    # Get cluster nodes list
+    CLUSTER_NODES=$(pvecm nodes 2>/dev/null | grep -E "^[[:space:]]+[0-9]+" | awk '{print $3}' | tr '\n' ',' | sed 's/,$//')
+
+    # Get node count
+    NODE_COUNT=$(echo "$CLUSTER_NODES" | tr ',' '\n' | wc -l)
+
+    echo "✓ Clustered Proxmox VE detected"
+    echo "  Cluster Name: $CLUSTER_NAME"
+    echo "  This Node: $NODE_NAME"
+    echo "  Cluster Members ($NODE_COUNT nodes): $CLUSTER_NODES"
+    echo ""
+    echo "  NOTE: Each node in the cluster should run this script individually."
+    echo "        Each node will get a unique VPN IP and configuration."
+  else
+    IS_CLUSTERED=false
+    NODE_NAME=$(hostname)
+    CLUSTER_NAME=""
+    CLUSTER_NODES=""
+
+    echo "✓ Standalone Proxmox VE node detected"
+    echo "  Node Name: $NODE_NAME"
+  fi
+
+  echo ""
+}
+
+# Install WireGuard (Proxmox is based on Debian)
+install_wireguard() {
+  if command -v wg &> /dev/null; then
+    echo "✓ WireGuard already installed ($(wg --version))"
+    return
+  fi
+
+  echo "Installing WireGuard..."
+
+  # Proxmox uses Debian repositories
+  apt-get update -qq
+  apt-get install -y wireguard wireguard-tools resolvconf
+
+  echo "✓ WireGuard installed"
+}
+
+# Generate WireGuard keys locally (NEVER transmitted)
+generate_keys() {
+  echo "Generating WireGuard keys locally..."
+
+  PRIVATE_KEY=$(wg genkey)
+  PUBLIC_KEY=$(echo "$PRIVATE_KEY" | wg pubkey)
+
+  echo "✓ Keys generated (public key will be sent to hub)"
+}
+
+# Register spoke with hub
+register_spoke() {
+  echo "Registering Proxmox node with hub..."
+
+  # Build metadata JSON
+  if [ "$IS_CLUSTERED" = true ]; then
+    METADATA=$(cat <<EOF
+{
+  "os": "proxmox",
+  "proxmoxVersion": "$PVE_VERSION",
+  "isProxmox": true,
+  "isClustered": true,
+  "nodeName": "$NODE_NAME",
+  "clusterName": "$CLUSTER_NAME",
+  "clusterNodes": "$CLUSTER_NODES",
+  "nodeCount": $(echo "$CLUSTER_NODES" | tr ',' '\n' | wc -l)
+}
+EOF
+    )
+  else
+    METADATA=$(cat <<EOF
+{
+  "os": "proxmox",
+  "proxmoxVersion": "$PVE_VERSION",
+  "isProxmox": true,
+  "isClustered": false,
+  "nodeName": "$NODE_NAME"
+}
+EOF
+    )
+  fi
+
+  # Detect WireGuard version
+  WG_VERSION=$(wg --version | head -n1 || echo "unknown")
+
+  # Make registration request
+  HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/registration_response.json \
+    -X POST "$CALLBACK_URL" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"token\": \"$TOKEN\",
+      \"publicKey\": \"$PUBLIC_KEY\",
+      \"os\": \"proxmox\",
+      \"isProxmox\": true,
+      \"proxmoxNodeName\": \"$NODE_NAME\",
+      \"proxmoxClusterName\": \"$CLUSTER_NAME\",
+      \"proxmoxVersion\": \"$PVE_VERSION\",
+      \"metadata\": $METADATA
+    }")
+
+  if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+    echo ""
+    echo "Error: Registration failed with HTTP $HTTP_CODE"
+    echo "Response:"
+    cat /tmp/registration_response.json
+    echo ""
+
+    # Parse error message if JSON
+    ERROR_MSG=$(cat /tmp/registration_response.json | grep -o '"error":"[^"]*"' | cut -d'"' -f4 || echo "Unknown error")
+    echo "Error: $ERROR_MSG"
+
+    # Provide recovery hints
+    if echo "$ERROR_MSG" | grep -qi "already.*used"; then
+      echo ""
+      echo "Recovery: The installation token has already been used."
+      echo "Please generate a new token from the dashboard and try again."
+      echo ""
+      echo "For clustered Proxmox: Each node needs its own unique token."
+    elif echo "$ERROR_MSG" | grep -qi "expired"; then
+      echo ""
+      echo "Recovery: The installation token has expired (tokens are valid for 24 hours)."
+      echo "Please generate a new token from the dashboard and try again."
+    elif echo "$ERROR_MSG" | grep -qi "invalid.*token"; then
+      echo ""
+      echo "Recovery: The installation token is invalid."
+      echo "Please check the token and try again, or generate a new one."
+    fi
+
+    rm -f /tmp/registration_response.json
+    exit 1
+  fi
+
+  echo "✓ Successfully registered Proxmox node with hub"
+
+  if [ "$IS_CLUSTERED" = true ]; then
+    echo ""
+    echo "  IMPORTANT FOR CLUSTERED PROXMOX:"
+    echo "  - This node ($NODE_NAME) is now registered"
+    echo "  - Each cluster member needs to run this script with a unique token"
+    echo "  - Generate a new token for each remaining node:"
+    for node in $(echo "$CLUSTER_NODES" | tr ',' '\n'); do
+      if [ "$node" != "$NODE_NAME" ]; then
+        echo "    - $node (needs installation)"
+      fi
+    done
+    echo ""
+  fi
+
+  rm -f /tmp/registration_response.json
+}
+
+# Create WireGuard configuration
+create_config() {
+  echo "Creating WireGuard configuration..."
+
+  CONFIG_FILE="/etc/wireguard/wg0.conf"
+
+  # Backup existing config if present
+  if [ -f "$CONFIG_FILE" ]; then
+    echo "Warning: Existing config found, backing up to $CONFIG_FILE.backup"
+    cp "$CONFIG_FILE" "$CONFIG_FILE.backup.$(date +%s)"
+  fi
+
+  # Create configuration
+  cat > "$CONFIG_FILE" <<EOF
+[Interface]
+Address = $SPOKE_IP
+PrivateKey = $PRIVATE_KEY
+DNS = $DNS_SERVERS
+
+# Proxmox-specific notes:
+# - This WireGuard interface is separate from Proxmox bridge interfaces (vmbr*)
+# - To allow VMs to use the VPN, uncomment the PostUp/PostDown rules below
+# - For cluster communication over VPN, ensure AllowedIPs includes other cluster nodes
+
+# Optional: Allow VMs to route through VPN (uncomment to enable)
+# PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o wg0 -j MASQUERADE
+# PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o wg0 -j MASQUERADE
+
+[Peer]
+# Hub ($HUB_ENDPOINT)
+PublicKey = $HUB_PUBLIC_KEY
+Endpoint = $HUB_ENDPOINT
+AllowedIPs = $NETWORK_CIDR
+PersistentKeepalive = 25
+EOF
+
+  # Secure permissions
+  chmod 600 "$CONFIG_FILE"
+  echo "✓ Configuration created at $CONFIG_FILE"
+}
+
+# Enable and start WireGuard
+enable_wireguard() {
+  echo "Enabling WireGuard service..."
+
+  # Enable systemd service
+  systemctl enable wg-quick@wg0
+
+  # Start WireGuard
+  echo "Starting WireGuard interface..."
+  systemctl start wg-quick@wg0
+
+  echo "✓ WireGuard enabled and started"
+}
+
+# Verify connection
+verify_connection() {
+  echo ""
+  echo "===== WireGuard Status ====="
+  wg show wg0
+
+  echo ""
+  echo "===== Network Configuration ====="
+  ip addr show wg0 2>/dev/null || echo "Warning: Unable to show interface details"
+
+  echo ""
+  echo "✓ Proxmox VE spoke configured successfully!"
+  echo ""
+  echo "  Node: $NODE_NAME"
+  if [ "$IS_CLUSTERED" = true ]; then
+    echo "  Cluster: $CLUSTER_NAME ($NODE_COUNT nodes)"
+  else
+    echo "  Cluster: Standalone"
+  fi
+  echo "  VPN IP: $SPOKE_IP"
+  echo "  Hub: $HUB_ENDPOINT"
+  echo ""
+  echo "Your Proxmox node is now connected to the hub."
+  echo "Check the dashboard to verify the connection status."
+  echo ""
+
+  if [ "$IS_CLUSTERED" = true ]; then
+    echo "───────────────────────────────────────────────────"
+    echo "  NEXT STEPS FOR CLUSTERED PROXMOX:"
+    echo "───────────────────────────────────────────────────"
+    echo ""
+    echo "This cluster has $NODE_COUNT nodes. To complete the VPN setup:"
+    echo ""
+    echo "1. Generate a new token for each remaining node in the dashboard"
+    echo "2. SSH to each node and run the installation script with its token"
+    echo "3. Each node will get a unique VPN IP and appear separately in the dashboard"
+    echo ""
+    echo "Cluster members:"
+    for node in $(echo "$CLUSTER_NODES" | tr ',' '\n'); do
+      if [ "$node" = "$NODE_NAME" ]; then
+        echo "  ✓ $node (this node - COMPLETE)"
+      else
+        echo "  ○ $node (needs installation)"
+      fi
+    done
+    echo ""
+    echo "Once all nodes are connected, they can communicate with each other"
+    echo "and the hub over the encrypted VPN tunnel."
+    echo ""
+  fi
+
+  echo "Useful commands:"
+  echo "  Show status:  wg show wg0"
+  echo "  Stop VPN:     systemctl stop wg-quick@wg0"
+  echo "  Start VPN:    systemctl start wg-quick@wg0"
+  echo "  Restart VPN:  systemctl restart wg-quick@wg0"
+}
+
+# Cleanup function for errors
+cleanup() {
+  if [ $? -ne 0 ]; then
+    echo ""
+    echo "Installation failed. Cleaning up..."
+
+    # Remove config if created
+    if [ -f /etc/wireguard/wg0.conf ]; then
+      systemctl stop wg-quick@wg0 2>/dev/null || true
+      systemctl disable wg-quick@wg0 2>/dev/null || true
+      rm -f /etc/wireguard/wg0.conf
+    fi
+
+    echo "Cleanup complete. Please review the error messages above."
+  fi
+}
+
+trap cleanup EXIT
+
+# Main execution
+detect_proxmox
+detect_cluster
+install_wireguard
+generate_keys
+register_spoke
+create_config
+enable_wireguard
+verify_connection
+
+# Success - disable cleanup trap
+trap - EXIT

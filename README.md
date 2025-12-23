@@ -1,22 +1,101 @@
-# WireGuard Hub-and-Spoke Dashboard
+# Hub-and-Spoke WireGuard VPN Management System
 
-React/TypeScript dashboard for managing WireGuard hub-and-spoke VPN configurations.
+A comprehensive web-based management system for deploying and managing WireGuard VPN in a hub-and-spoke topology with automated spoke provisioning.
 
-## Features
+## ⭐ Features
 
-- **Config Generation**: Generate WireGuard configurations for hub and spoke peers
-- **Peer Management**: Add, edit, and remove spoke peers
-- **Status Monitoring**: View connection status and metrics
-- **Key Management**: Generate and manage WireGuard keypairs
+### Core Capabilities
 
-## Development
+- **Automated Hub Initialization**: Web-based wizard for first-time setup
+- **One-Time Installation Tokens**: 256-bit secure tokens with 24-hour expiration
+- **Multi-Platform Support**: Linux, macOS, Windows, and Proxmox VE
+- **Zero-Touch Spoke Configuration**: Automated installation scripts
+- **Real-Time Monitoring**: Live connection status and handshake tracking
+- **Proxmox Cluster Integration**: Automatic cluster detection and hierarchical grouping
+
+### Security
+
+- 🔒 **Zero-Trust Key Generation**: Private keys generated locally, never transmitted
+- 🔐 **TLS Transport Encryption**: HTTPS-only in production
+- ⚡ **Atomic Token Validation**: Prevents race conditions
+- 🛡️ **Rate Limiting**: Protects against brute force attacks (10 tokens/hour)
+- 🔑 **Public Key Uniqueness**: Prevents spoke impersonation
+
+### Platform-Specific Features
+
+#### Linux
+- Auto-detection: Ubuntu, Debian, CentOS, RHEL, Fedora, Arch, OpenSUSE
+- Automatic package manager selection
+- systemd service configuration
+
+#### macOS
+- Homebrew integration
+- launchd service configuration
+
+#### Windows
+- PowerShell-based installation
+- Chocolatey package management
+- WireGuard service integration
+
+#### Proxmox VE
+- Automatic cluster detection via `pvecm status`
+- Individual spoke per node
+- Multi-datacenter support
+- Hierarchical dashboard visualization
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Node.js 18+ and npm/yarn/pnpm
-- React 18+
+- Ubuntu 22.04 LTS (hub server)
+- Node.js 18+
+- WireGuard kernel module
+- Public IP address or domain name
 
-### Setup
+### Installation
+
+```bash
+# Clone repository
+git clone https://github.com/dtolan/hub_and_spoke_wireguard.git
+cd hub_and_spoke_wireguard
+
+# Install dependencies
+npm install
+
+# Build frontend and backend
+npm run build
+npm run build:backend
+
+# Initialize database
+npm run db:migrate
+
+# Start backend server
+npm run dev:backend
+```
+
+### First-Time Setup
+
+1. **Access Dashboard**: `http://your-server-ip:3000`
+2. **Initialize Hub**: Complete the initialization wizard
+3. **Generate Token**: Create an installation token
+4. **Install Spoke**: Run the command on your spoke device
+
+---
+
+## 📚 Documentation
+
+- **[Deployment Guide](DEPLOYMENT.md)** - Complete Ubuntu installation guide
+- **[Architecture Guide](docs/ARCHITECTURE_GUIDE_PRESENTATION.md)** - 76-page technical specification
+- **[Executive Summary](docs/EXECUTIVE_SUMMARY.md)** - Business overview
+- **[Diagrams](docs/diagrams/)** - System architecture diagrams
+
+---
+
+## 🛠️ Development
+
+### Prerequisites
 
 ```bash
 # Install dependencies

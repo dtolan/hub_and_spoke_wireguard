@@ -1,0 +1,242 @@
+#!/bin/bash
+set -e
+
+# Hub-and-Spoke WireGuard Installation Script - Linux
+# This script installs WireGuard, generates keys locally, and registers with the hub
+
+# Embedded configuration (replaced by ScriptGenerator)
+TOKEN="{{TOKEN}}"
+HUB_ENDPOINT="{{HUB_ENDPOINT}}"
+HUB_PUBLIC_KEY="{{HUB_PUBLIC_KEY}}"
+SPOKE_IP="{{SPOKE_IP}}"
+NETWORK_CIDR="{{NETWORK_CIDR}}"
+DNS_SERVERS="{{DNS_SERVERS}}"
+CALLBACK_URL="{{CALLBACK_URL}}"
+SPOKE_NAME="{{SPOKE_NAME}}"
+
+echo "===== WireGuard Spoke Installation - Linux ====="
+echo "Spoke: $SPOKE_NAME"
+echo "Allocated IP: $SPOKE_IP"
+echo ""
+
+# Detect Linux distribution
+detect_distro() {
+  if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    DISTRO=$ID
+    VERSION=$VERSION_ID
+  elif [ -f /etc/redhat-release ]; then
+    DISTRO="rhel"
+  else
+    echo "Error: Unable to detect Linux distribution"
+    exit 1
+  fi
+
+  echo "Detected distribution: $DISTRO $VERSION"
+}
+
+# Install WireGuard based on distribution
+install_wireguard() {
+  if command -v wg &> /dev/null; then
+    echo "✓ WireGuard already installed ($(wg --version))"
+    return
+  fi
+
+  echo "Installing WireGuard..."
+
+  case "$DISTRO" in
+    ubuntu|debian)
+      apt-get update -qq
+      apt-get install -y wireguard wireguard-tools resolvconf
+      ;;
+    centos|rhel|rocky|almalinux)
+      if [ "$VERSION" -ge 8 ]; then
+        dnf install -y epel-release
+        dnf install -y wireguard-tools
+      else
+        yum install -y epel-release
+        yum install -y wireguard-tools kmod-wireguard
+      fi
+      ;;
+    fedora)
+      dnf install -y wireguard-tools
+      ;;
+    arch|manjaro)
+      pacman -Sy --noconfirm wireguard-tools
+      ;;
+    opensuse*|sles)
+      zypper install -y wireguard-tools
+      ;;
+    *)
+      echo "Error: Unsupported distribution: $DISTRO"
+      echo "Please install WireGuard manually and re-run this script"
+      exit 1
+      ;;
+  esac
+
+  echo "✓ WireGuard installed"
+}
+
+# Generate WireGuard keys locally (NEVER transmitted)
+generate_keys() {
+  echo "Generating WireGuard keys locally..."
+
+  PRIVATE_KEY=$(wg genkey)
+  PUBLIC_KEY=$(echo "$PRIVATE_KEY" | wg pubkey)
+
+  echo "✓ Keys generated (public key will be sent to hub)"
+}
+
+# Register spoke with hub
+register_spoke() {
+  echo "Registering with hub at $CALLBACK_URL..."
+
+  # Detect WireGuard version for metadata
+  WG_VERSION=$(wg --version | head -n1 || echo "unknown")
+
+  # Make registration request
+  HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/registration_response.json \
+    -X POST "$CALLBACK_URL" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"token\": \"$TOKEN\",
+      \"publicKey\": \"$PUBLIC_KEY\",
+      \"os\": \"linux\",
+      \"metadata\": {
+        \"wireguardVersion\": \"$WG_VERSION\",
+        \"distribution\": \"$DISTRO\",
+        \"version\": \"$VERSION\"
+      }
+    }")
+
+  if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+    echo ""
+    echo "Error: Registration failed with HTTP $HTTP_CODE"
+    echo "Response:"
+    cat /tmp/registration_response.json
+    echo ""
+
+    # Parse error message if JSON
+    ERROR_MSG=$(cat /tmp/registration_response.json | grep -o '"error":"[^"]*"' | cut -d'"' -f4 || echo "Unknown error")
+    echo "Error: $ERROR_MSG"
+
+    # Provide recovery hints
+    if echo "$ERROR_MSG" | grep -qi "already.*used"; then
+      echo ""
+      echo "Recovery: The installation token has already been used."
+      echo "Please generate a new token from the dashboard and try again."
+    elif echo "$ERROR_MSG" | grep -qi "expired"; then
+      echo ""
+      echo "Recovery: The installation token has expired (tokens are valid for 24 hours)."
+      echo "Please generate a new token from the dashboard and try again."
+    elif echo "$ERROR_MSG" | grep -qi "invalid.*token"; then
+      echo ""
+      echo "Recovery: The installation token is invalid."
+      echo "Please check the token and try again, or generate a new one."
+    fi
+
+    rm -f /tmp/registration_response.json
+    exit 1
+  fi
+
+  echo "✓ Successfully registered with hub"
+  rm -f /tmp/registration_response.json
+}
+
+# Create WireGuard configuration
+create_config() {
+  echo "Creating WireGuard configuration..."
+
+  CONFIG_FILE="/etc/wireguard/wg0.conf"
+
+  # Backup existing config if present
+  if [ -f "$CONFIG_FILE" ]; then
+    echo "Warning: Existing config found, backing up to $CONFIG_FILE.backup"
+    cp "$CONFIG_FILE" "$CONFIG_FILE.backup.$(date +%s)"
+  fi
+
+  # Create configuration
+  cat > "$CONFIG_FILE" <<EOF
+[Interface]
+Address = $SPOKE_IP
+PrivateKey = $PRIVATE_KEY
+DNS = $DNS_SERVERS
+
+[Peer]
+# Hub ($HUB_ENDPOINT)
+PublicKey = $HUB_PUBLIC_KEY
+Endpoint = $HUB_ENDPOINT
+AllowedIPs = $NETWORK_CIDR
+PersistentKeepalive = 25
+EOF
+
+  # Secure permissions
+  chmod 600 "$CONFIG_FILE"
+  echo "✓ Configuration created at $CONFIG_FILE"
+}
+
+# Enable and start WireGuard
+enable_wireguard() {
+  echo "Enabling WireGuard service..."
+
+  # Enable systemd service
+  systemctl enable wg-quick@wg0
+
+  # Start WireGuard
+  echo "Starting WireGuard interface..."
+  systemctl start wg-quick@wg0
+
+  echo "✓ WireGuard enabled and started"
+}
+
+# Verify connection
+verify_connection() {
+  echo ""
+  echo "===== WireGuard Status ====="
+  wg show wg0
+
+  echo ""
+  echo "===== Network Configuration ====="
+  ip addr show wg0 2>/dev/null || echo "Warning: Unable to show interface details"
+
+  echo ""
+  echo "✓ Installation complete!"
+  echo ""
+  echo "Spoke Name: $SPOKE_NAME"
+  echo "VPN IP: $SPOKE_IP"
+  echo "Hub: $HUB_ENDPOINT"
+  echo ""
+  echo "Your spoke is now connected to the hub."
+  echo "Check the dashboard to verify the connection status."
+}
+
+# Cleanup function for errors
+cleanup() {
+  if [ $? -ne 0 ]; then
+    echo ""
+    echo "Installation failed. Cleaning up..."
+
+    # Remove config if created
+    if [ -f /etc/wireguard/wg0.conf ]; then
+      systemctl stop wg-quick@wg0 2>/dev/null || true
+      systemctl disable wg-quick@wg0 2>/dev/null || true
+      rm -f /etc/wireguard/wg0.conf
+    fi
+
+    echo "Cleanup complete. Please review the error messages above."
+  fi
+}
+
+trap cleanup EXIT
+
+# Main execution
+detect_distro
+install_wireguard
+generate_keys
+register_spoke
+create_config
+enable_wireguard
+verify_connection
+
+# Success - disable cleanup trap
+trap - EXIT

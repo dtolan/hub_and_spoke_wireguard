@@ -1,0 +1,292 @@
+#Requires -RunAsAdministrator
+
+<#
+.SYNOPSIS
+    Hub-and-Spoke WireGuard Installation Script - Windows
+.DESCRIPTION
+    This script installs WireGuard, generates keys locally, and registers with the hub
+.NOTES
+    Must be run as Administrator
+#>
+
+# Embedded configuration (replaced by ScriptGenerator)
+$TOKEN = "{{TOKEN}}"
+$HUB_ENDPOINT = "{{HUB_ENDPOINT}}"
+$HUB_PUBLIC_KEY = "{{HUB_PUBLIC_KEY}}"
+$SPOKE_IP = "{{SPOKE_IP}}"
+$NETWORK_CIDR = "{{NETWORK_CIDR}}"
+$DNS_SERVERS = "{{DNS_SERVERS}}"
+$CALLBACK_URL = "{{CALLBACK_URL}}"
+$SPOKE_NAME = "{{SPOKE_NAME}}"
+
+Write-Host "===== WireGuard Spoke Installation - Windows =====" -ForegroundColor Cyan
+Write-Host "Spoke: $SPOKE_NAME"
+Write-Host "Allocated IP: $SPOKE_IP"
+Write-Host ""
+
+# Error handling
+$ErrorActionPreference = "Stop"
+
+# Check for Administrator privileges
+function Test-Administrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+if (-not (Test-Administrator)) {
+    Write-Error "This script must be run as Administrator"
+    exit 1
+}
+
+# Install Chocolatey if not present
+function Install-Chocolatey {
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        Write-Host "✓ Chocolatey already installed" -ForegroundColor Green
+        return
+    }
+
+    Write-Host "Installing Chocolatey..." -ForegroundColor Yellow
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+    # Refresh environment variables
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+    Write-Host "✓ Chocolatey installed" -ForegroundColor Green
+}
+
+# Install WireGuard
+function Install-WireGuard {
+    if (Get-Command wg -ErrorAction SilentlyContinue) {
+        $version = (wg --version 2>&1) -replace "`n.*", ""
+        Write-Host "✓ WireGuard already installed ($version)" -ForegroundColor Green
+        return
+    }
+
+    Write-Host "Installing WireGuard via Chocolatey..." -ForegroundColor Yellow
+    choco install wireguard -y --no-progress
+
+    # Refresh environment variables
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+    Write-Host "✓ WireGuard installed" -ForegroundColor Green
+}
+
+# Generate WireGuard keys locally (NEVER transmitted)
+function New-WireGuardKeys {
+    Write-Host "Generating WireGuard keys locally..." -ForegroundColor Yellow
+
+    # Generate private key
+    $privateKeyBytes = & wg genkey
+    $script:PRIVATE_KEY = $privateKeyBytes
+
+    # Generate public key
+    $script:PUBLIC_KEY = $privateKeyBytes | wg pubkey
+
+    Write-Host "✓ Keys generated (public key will be sent to hub)" -ForegroundColor Green
+}
+
+# Register spoke with hub
+function Register-Spoke {
+    Write-Host "Registering with hub at $CALLBACK_URL..." -ForegroundColor Yellow
+
+    # Detect WireGuard and Windows versions
+    $wgVersion = (wg --version 2>&1) -replace "`n.*", ""
+    $winVersion = [System.Environment]::OSVersion.Version.ToString()
+
+    # Build registration payload
+    $body = @{
+        token = $TOKEN
+        publicKey = $PUBLIC_KEY
+        os = "windows"
+        metadata = @{
+            wireguardVersion = $wgVersion
+            windowsVersion = $winVersion
+        }
+    } | ConvertTo-Json
+
+    try {
+        $response = Invoke-WebRequest -Uri $CALLBACK_URL -Method POST `
+            -ContentType "application/json" `
+            -Body $body `
+            -UseBasicParsing
+
+        Write-Host "✓ Successfully registered with hub" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "" -ForegroundColor Red
+        Write-Host "Error: Registration failed" -ForegroundColor Red
+        Write-Host "Status: $($_.Exception.Response.StatusCode.value__)" -ForegroundColor Red
+
+        # Parse error response
+        $errorResponse = $_.ErrorDetails.Message
+        try {
+            $errorJson = $errorResponse | ConvertFrom-Json
+            $errorMsg = $errorJson.error
+            Write-Host "Error: $errorMsg" -ForegroundColor Red
+
+            # Provide recovery hints
+            if ($errorMsg -match "already.*used") {
+                Write-Host ""
+                Write-Host "Recovery: The installation token has already been used." -ForegroundColor Yellow
+                Write-Host "Please generate a new token from the dashboard and try again." -ForegroundColor Yellow
+            }
+            elseif ($errorMsg -match "expired") {
+                Write-Host ""
+                Write-Host "Recovery: The installation token has expired (tokens are valid for 24 hours)." -ForegroundColor Yellow
+                Write-Host "Please generate a new token from the dashboard and try again." -ForegroundColor Yellow
+            }
+            elseif ($errorMsg -match "invalid.*token") {
+                Write-Host ""
+                Write-Host "Recovery: The installation token is invalid." -ForegroundColor Yellow
+                Write-Host "Please check the token and try again, or generate a new one." -ForegroundColor Yellow
+            }
+        }
+        catch {
+            Write-Host "Response: $errorResponse" -ForegroundColor Red
+        }
+
+        exit 1
+    }
+}
+
+# Create WireGuard configuration
+function New-WireGuardConfig {
+    Write-Host "Creating WireGuard configuration..." -ForegroundColor Yellow
+
+    $configPath = "$env:ProgramFiles\WireGuard\Data\Configurations\wg0.conf"
+    $configDir = Split-Path -Parent $configPath
+
+    # Create directory if it doesn't exist
+    if (-not (Test-Path $configDir)) {
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+    }
+
+    # Backup existing config if present
+    if (Test-Path $configPath) {
+        $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+        $backupPath = "$configPath.backup_$timestamp"
+        Write-Host "Warning: Existing config found, backing up to $backupPath" -ForegroundColor Yellow
+        Copy-Item $configPath $backupPath
+    }
+
+    # Create configuration file
+    $configContent = @"
+[Interface]
+Address = $SPOKE_IP
+PrivateKey = $PRIVATE_KEY
+DNS = $DNS_SERVERS
+
+[Peer]
+# Hub ($HUB_ENDPOINT)
+PublicKey = $HUB_PUBLIC_KEY
+Endpoint = $HUB_ENDPOINT
+AllowedIPs = $NETWORK_CIDR
+PersistentKeepalive = 25
+"@
+
+    $configContent | Out-File -FilePath $configPath -Encoding ASCII -NoNewline
+
+    Write-Host "✓ Configuration created at $configPath" -ForegroundColor Green
+    return $configPath
+}
+
+# Start WireGuard tunnel
+function Start-WireGuardTunnel {
+    param (
+        [string]$ConfigPath
+    )
+
+    Write-Host "Starting WireGuard tunnel..." -ForegroundColor Yellow
+
+    # Use WireGuard service manager
+    $wgService = "C:\Program Files\WireGuard\wireguard.exe"
+
+    if (-not (Test-Path $wgService)) {
+        Write-Error "WireGuard service executable not found at $wgService"
+        exit 1
+    }
+
+    # Install tunnel service
+    & $wgService /installtunnelservice $ConfigPath
+
+    # Give it a moment to start
+    Start-Sleep -Seconds 2
+
+    Write-Host "✓ WireGuard tunnel started" -ForegroundColor Green
+}
+
+# Verify connection
+function Test-WireGuardConnection {
+    Write-Host ""
+    Write-Host "===== WireGuard Status =====" -ForegroundColor Cyan
+
+    try {
+        $status = & wg show wg0
+        Write-Host $status
+    }
+    catch {
+        Write-Host "Warning: Unable to show WireGuard status (tunnel may still be initializing)" -ForegroundColor Yellow
+    }
+
+    Write-Host ""
+    Write-Host "✓ Installation complete!" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Spoke Name: $SPOKE_NAME" -ForegroundColor White
+    Write-Host "VPN IP: $SPOKE_IP" -ForegroundColor White
+    Write-Host "Hub: $HUB_ENDPOINT" -ForegroundColor White
+    Write-Host ""
+    Write-Host "Your spoke is now connected to the hub." -ForegroundColor Green
+    Write-Host "Check the dashboard to verify the connection status." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "To manage WireGuard:" -ForegroundColor Yellow
+    Write-Host "  - Open WireGuard GUI from Start Menu" -ForegroundColor Yellow
+    Write-Host "  - Or use: wg show wg0" -ForegroundColor Yellow
+}
+
+# Cleanup function for errors
+function Invoke-Cleanup {
+    if ($LASTEXITCODE -ne 0 -or $Error.Count -gt 0) {
+        Write-Host ""
+        Write-Host "Installation failed. Cleaning up..." -ForegroundColor Red
+
+        # Remove tunnel service
+        try {
+            $wgService = "C:\Program Files\WireGuard\wireguard.exe"
+            if (Test-Path $wgService) {
+                & $wgService /uninstalltunnelservice wg0 2>$null
+            }
+        }
+        catch {
+            # Ignore cleanup errors
+        }
+
+        # Remove config file
+        $configPath = "$env:ProgramFiles\WireGuard\Data\Configurations\wg0.conf"
+        if (Test-Path $configPath) {
+            Remove-Item $configPath -Force -ErrorAction SilentlyContinue
+        }
+
+        Write-Host "Cleanup complete. Please review the error messages above." -ForegroundColor Red
+    }
+}
+
+# Main execution
+try {
+    Install-Chocolatey
+    Install-WireGuard
+    New-WireGuardKeys
+    Register-Spoke
+    $configPath = New-WireGuardConfig
+    Start-WireGuardTunnel -ConfigPath $configPath
+    Test-WireGuardConnection
+}
+catch {
+    Write-Host ""
+    Write-Host "Error: $_" -ForegroundColor Red
+    Write-Host "Stack Trace: $($_.ScriptStackTrace)" -ForegroundColor Red
+    Invoke-Cleanup
+    exit 1
+}
