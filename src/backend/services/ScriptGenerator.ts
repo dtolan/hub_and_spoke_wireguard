@@ -121,10 +121,15 @@ export class ScriptGenerator {
     // Load template
     const template = this.loadTemplate(platform)
 
+    // Determine which endpoint to use (prefer private if available and usePrivateEndpoint flag is set)
+    const hubEndpoint = tokenData.usePrivateEndpoint && tokenData.hubPrivateEndpoint
+      ? tokenData.hubPrivateEndpoint
+      : tokenData.hubPublicEndpoint
+
     // Prepare variables for replacement
     const variables: TemplateVariables = {
       TOKEN: tokenData.token,
-      HUB_ENDPOINT: tokenData.hubEndpoint,
+      HUB_ENDPOINT: hubEndpoint,
       HUB_PUBLIC_KEY: tokenData.hubPublicKey,
       SPOKE_IP: tokenData.allowedIPs[0], // First IP is the spoke's address
       NETWORK_CIDR: tokenData.networkCIDR,
