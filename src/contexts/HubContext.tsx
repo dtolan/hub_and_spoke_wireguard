@@ -50,8 +50,9 @@ const HubContext = createContext<HubContextValue | undefined>(undefined)
 
 /**
  * API base URL from environment or default
+ * Empty string means use relative URLs (for Vite proxy in development)
  */
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 /**
  * Hub context provider component
