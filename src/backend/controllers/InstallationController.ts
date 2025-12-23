@@ -49,7 +49,8 @@ export class InstallationController {
         publicKey: hubConfig.public_key as string,
         networkCIDR: hubConfig.network_cidr as string,
         dns: JSON.parse((hubConfig.dns as string) || '[]'),
-        endpoint: hubConfig.endpoint as string,
+        publicEndpoint: hubConfig.public_endpoint as string,
+        privateEndpoint: (hubConfig.private_endpoint as string) || undefined,
         createdAt: new Date(hubConfig.created_at as string),
         updatedAt: new Date(hubConfig.updated_at as string),
       }
