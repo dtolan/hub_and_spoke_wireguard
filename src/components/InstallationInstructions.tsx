@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import type { InstallationToken } from '../types'
 
 interface InstallationInstructionsProps {

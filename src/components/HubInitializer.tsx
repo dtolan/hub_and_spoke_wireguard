@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useHub } from '../contexts/HubContext'
 import type { HubInitConfig } from '../types'
 

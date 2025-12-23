@@ -48,9 +48,9 @@ export function validateJSON(req: Request, res: Response, next: NextFunction): v
  */
 export function errorHandler(
   err: Error,
-  req: Request,
+  _req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void {
   console.error('Unhandled error:', err)
 

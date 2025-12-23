@@ -1,4 +1,4 @@
-import type { HubSpokeConfig, WireGuardPeer } from '../types'
+import type { HubSpokeConfig } from '../types'
 
 /**
  * Generate WireGuard configuration file content for the hub

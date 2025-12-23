@@ -97,7 +97,7 @@ export class InstallationController {
    *
    * List all installation tokens (used and unused)
    */
-  static async listTokens(req: Request, res: Response): Promise<void> {
+  static async listTokens(_req: Request, res: Response): Promise<void> {
     try {
       const db = getDatabase()
 

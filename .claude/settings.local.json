@@ -3,7 +3,10 @@
     "allow": [
       "Bash(npm init:*)",
       "Bash(dir \"c:\\\\github\\\\hub_and_spoke_wireguard\")",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run build:backend:*)"
     ]
   }
 }

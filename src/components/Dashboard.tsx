@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useHub } from '../contexts/HubContext'
 import { SpokeManager } from './SpokeManager'
 import { InstallationTokenGenerator } from './InstallationTokenGenerator'
@@ -10,7 +10,7 @@ type DashboardTab = 'overview' | 'spokes' | 'proxmox' | 'tokens'
  * Main dashboard component for WireGuard hub-and-spoke management
  */
 const Dashboard: React.FC = () => {
-  const { hubConfig, spokes, pendingTokens, loading, error } = useHub()
+  const { hubConfig, spokes, pendingTokens, error } = useHub()
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
 
   // Calculate statistics

@@ -1,6 +1,5 @@
 import { spawn } from 'child_process'
 import fs from 'fs'
-import path from 'path'
 import type { HubConfig, HubInitConfig, SpokeRegistration } from '../../types/index.js'
 
 /**
@@ -301,7 +300,6 @@ AllowedIPs = ${spoke.allowedIPs.join(', ')}
         }
 
         if (trimmed.startsWith('latest handshake:')) {
-          const handshakeStr = trimmed.split(':').slice(1).join(':').trim()
           // Parse relative time (e.g., "1 minute, 30 seconds ago")
           // For now, just store current time minus a rough estimate
           // TODO: Implement proper relative time parsing

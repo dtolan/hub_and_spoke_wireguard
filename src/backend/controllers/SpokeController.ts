@@ -204,7 +204,7 @@ export class SpokeController {
    *
    * List all registered spokes
    */
-  static async list(req: Request, res: Response): Promise<void> {
+  static async list(_req: Request, res: Response): Promise<void> {
     try {
       const db = getDatabase()
 

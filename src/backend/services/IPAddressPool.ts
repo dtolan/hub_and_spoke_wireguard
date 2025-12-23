@@ -1,9 +1,27 @@
-import { Address4 } from 'ipaddr.js'
-
 /**
  * IP Address allocation service for hub-and-spoke network
  */
 export class IPAddressPool {
+  /**
+   * Convert IP address string to integer
+   */
+  private static ipToInt(ip: string): number {
+    const octets = ip.split('.').map((s) => parseInt(s, 10))
+    return octets.reduce((acc: number, octet: number) => acc * 256 + octet, 0)
+  }
+
+  /**
+   * Convert integer to IP address string
+   */
+  private static intToIp(int: number): string {
+    return [
+      (int >>> 24) & 255,
+      (int >>> 16) & 255,
+      (int >>> 8) & 255,
+      int & 255,
+    ].join('.')
+  }
+
   /**
    * Get next available IP address from CIDR range
    * @param networkCIDR Network CIDR (e.g., "10.0.1.0/24")
@@ -23,8 +41,7 @@ export class IPAddressPool {
       throw new Error('Invalid CIDR prefix: must be between /8 and /30')
     }
 
-    const network = Address4.fromAddress4(networkAddr)
-    const networkInt = network.toArray().reduce((acc, octet) => acc * 256 + octet, 0)
+    const networkInt = this.ipToInt(networkAddr)
 
     // Calculate network range
     const hostBits = 32 - prefix
@@ -39,7 +56,7 @@ export class IPAddressPool {
     // Start from reserveFirst (skip network address and reserved IPs)
     for (let i = reserveFirst; i < usableHosts; i++) {
       const candidateInt = networkInt + i
-      const candidate = Address4.fromInteger(candidateInt).address
+      const candidate = this.intToIp(candidateInt)
 
       if (!normalizedUsedIPs.has(candidate)) {
         return `${candidate}/${prefix}`
@@ -55,13 +72,11 @@ export class IPAddressPool {
   static isIPInNetwork(ip: string, networkCIDR: string): boolean {
     try {
       const [ipAddr] = ip.split('/')
-      const addr = Address4.fromAddress4(ipAddr)
       const [networkAddr, prefixStr] = networkCIDR.split('/')
-      const network = Address4.fromAddress4(networkAddr)
       const prefix = parseInt(prefixStr, 10)
 
-      const networkInt = network.toArray().reduce((acc, octet) => acc * 256 + octet, 0)
-      const ipInt = addr.toArray().reduce((acc, octet) => acc * 256 + octet, 0)
+      const networkInt = this.ipToInt(networkAddr)
+      const ipInt = this.ipToInt(ipAddr)
 
       const hostBits = 32 - prefix
       const mask = (~0 << hostBits) >>> 0
@@ -78,8 +93,12 @@ export class IPAddressPool {
   static isValidIP(ip: string): boolean {
     try {
       const [ipAddr] = ip.split('/')
-      Address4.fromAddress4(ipAddr)
-      return true
+      const octets = ipAddr.split('.')
+      if (octets.length !== 4) return false
+      return octets.every((octet) => {
+        const num = parseInt(octet, 10)
+        return num >= 0 && num <= 255 && !isNaN(num)
+      })
     } catch {
       return false
     }

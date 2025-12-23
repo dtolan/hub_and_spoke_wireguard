@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useHub } from '../contexts/HubContext'
 import type { SpokeRegistration } from '../types'
 
@@ -7,10 +7,9 @@ import type { SpokeRegistration } from '../types'
  * Displays all registered spokes with status and management actions
  */
 export function SpokeManager() {
-  const { spokes, removeSpoke, loading } = useHub()
+  const { spokes, removeSpoke } = useHub()
   const [selectedSpoke, setSelectedSpoke] = useState<string | null>(null)
   const [filterOS, setFilterOS] = useState<string>('all')
-  const [showTokenGenerator, setShowTokenGenerator] = useState(false)
 
   /**
    * Get status indicator for a spoke
@@ -90,13 +89,6 @@ export function SpokeManager() {
             {spokes.length} spoke{spokes.length !== 1 ? 's' : ''} connected
           </p>
         </div>
-
-        <button
-          onClick={() => setShowTokenGenerator(true)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-        >
-          + Add Spoke
-        </button>
       </div>
 
       {/* Filter Tabs */}
@@ -178,9 +170,9 @@ export function SpokeManager() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{spoke.name}</div>
-                      {spoke.isProxmox && spoke.proxmoxClusterName && (
+                      {spoke.isProxmox && spoke.metadata?.proxmoxClusterName && (
                         <div className="text-xs text-gray-500">
-                          Cluster: {spoke.proxmoxClusterName}
+                          Cluster: {spoke.metadata.proxmoxClusterName}
                         </div>
                       )}
                     </td>
@@ -211,7 +203,6 @@ export function SpokeManager() {
                       <button
                         onClick={() => handleRemoveSpoke(spoke.id)}
                         className="text-red-600 hover:text-red-900"
-                        disabled={loading}
                       >
                         Remove
                       </button>
@@ -282,11 +273,11 @@ export function SpokeManager() {
                         <dd className="mt-1 text-sm text-gray-900">{spoke.proxmoxVersion}</dd>
                       </div>
 
-                      {spoke.proxmoxClusterName && (
+                      {spoke.metadata?.proxmoxClusterName && (
                         <div>
                           <dt className="text-sm font-medium text-gray-500">Cluster</dt>
                           <dd className="mt-1 text-sm text-gray-900">
-                            {spoke.proxmoxClusterName}
+                            {spoke.metadata.proxmoxClusterName}
                           </dd>
                         </div>
                       )}

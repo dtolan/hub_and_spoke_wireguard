@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useHub } from '../contexts/HubContext'
-import type { ProxmoxCluster, SpokeRegistration } from '../types'
+import type { SpokeRegistration } from '../types'
 
 /**
  * Proxmox cluster hierarchical view component
  * Groups Proxmox nodes by cluster with status indicators
  */
 export function ProxmoxClusterView() {
-  const { spokes, proxmoxClusters, loading } = useHub()
+  const { spokes, proxmoxClusters } = useHub()
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set())
 
   // Get Proxmox spokes

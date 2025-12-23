@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import path from 'path'
 import fs from 'fs'
+import type BetterSqlite3 from 'better-sqlite3'
 
 const DATABASE_PATH = process.env.DATABASE_PATH || './data/wireguard-hub.sqlite'
 
@@ -10,10 +11,17 @@ if (!fs.existsSync(dir)) {
   fs.mkdirSync(dir, { recursive: true })
 }
 
-export const db = new Database(DATABASE_PATH)
+export const db: BetterSqlite3.Database = new Database(DATABASE_PATH)
 
 // Enable foreign keys
 db.pragma('foreign_keys = ON')
+
+/**
+ * Get database instance
+ */
+export function getDatabase(): BetterSqlite3.Database {
+  return db
+}
 
 /**
  * Initialize database schema
@@ -39,6 +47,18 @@ export function initializeDatabase() {
     )
   `)
 
+  // Proxmox clusters table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS proxmox_clusters (
+      id TEXT PRIMARY KEY,
+      cluster_name TEXT UNIQUE NOT NULL,
+      datacenter TEXT,
+      description TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+
   // Spoke registrations table
   db.exec(`
     CREATE TABLE IF NOT EXISTS spoke_registrations (
@@ -51,8 +71,13 @@ export function initializeDatabase() {
       last_handshake TEXT,
       status TEXT NOT NULL,
       os TEXT NOT NULL,
+      is_proxmox INTEGER DEFAULT 0,
+      proxmox_cluster_id TEXT,
+      proxmox_node_name TEXT,
+      proxmox_version TEXT,
       metadata TEXT,
-      FOREIGN KEY (token_id) REFERENCES installation_tokens(id)
+      FOREIGN KEY (token_id) REFERENCES installation_tokens(id),
+      FOREIGN KEY (proxmox_cluster_id) REFERENCES proxmox_clusters(id)
     )
   `)
 
@@ -90,3 +115,6 @@ export function initializeDatabase() {
 export function closeDatabase() {
   db.close()
 }
+
+// Alias for backward compatibility
+export const initDatabase = initializeDatabase

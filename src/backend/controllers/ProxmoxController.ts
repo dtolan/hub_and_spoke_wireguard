@@ -11,7 +11,7 @@ export class ProxmoxController {
    *
    * List all Proxmox clusters with node counts
    */
-  static async listClusters(req: Request, res: Response): Promise<void> {
+  static async listClusters(_req: Request, res: Response): Promise<void> {
     try {
       const db = getDatabase()
 

@@ -1,4 +1,3 @@
-import React from 'react'
 import { HubProvider, useHub } from './contexts/HubContext'
 import { HubInitializer } from './components/HubInitializer'
 import Dashboard from './components/Dashboard'

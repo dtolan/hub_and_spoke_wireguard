@@ -90,10 +90,21 @@ export interface SpokeRegistration {
   registeredAt: Date
   lastHandshake?: Date
   status: 'pending' | 'active' | 'inactive'
-  os: 'linux' | 'macos' | 'windows'
+  os: 'linux' | 'macos' | 'windows' | 'proxmox'
+
+  // Proxmox-specific fields
+  isProxmox?: boolean
+  proxmoxClusterId?: string
+  proxmoxNodeName?: string
+  proxmoxVersion?: string
+
   metadata?: {
     wireguardVersion?: string
     ipAddress?: string
+    // Proxmox metadata
+    proxmoxClusterName?: string
+    proxmoxClusterNodes?: string
+    isClustered?: boolean
   }
 }
 
@@ -121,4 +132,17 @@ export interface HubInitConfig {
   listenPort: number
   endpoint: string
   dns?: string[]
+}
+
+/**
+ * Proxmox cluster grouping
+ */
+export interface ProxmoxCluster {
+  id: string
+  clusterName: string
+  datacenter?: string
+  description?: string
+  nodes: SpokeRegistration[]
+  createdAt: Date
+  updatedAt: Date
 }

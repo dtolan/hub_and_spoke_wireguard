@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useHub } from '../contexts/HubContext'
 import { InstallationInstructions } from './InstallationInstructions'
 import type { InstallationToken } from '../types'

@@ -90,7 +90,7 @@ export class HubController {
    *
    * Get current hub configuration (without private key)
    */
-  static async getConfig(req: Request, res: Response): Promise<void> {
+  static async getConfig(_req: Request, res: Response): Promise<void> {
     try {
       const db = getDatabase()
 
@@ -230,7 +230,7 @@ export class HubController {
    *
    * Get live WireGuard interface status
    */
-  static async getStatus(req: Request, res: Response): Promise<void> {
+  static async getStatus(_req: Request, res: Response): Promise<void> {
     try {
       const status = await WireGuardService.getStatus()
 

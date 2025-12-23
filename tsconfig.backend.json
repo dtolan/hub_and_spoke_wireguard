@@ -1,5 +1,4 @@
 {
-  "extends": "./tsconfig.json",
   "compilerOptions": {
     "module": "CommonJS",
     "target": "ES2020",
@@ -12,9 +11,9 @@
     "strict": true,
     "resolveJsonModule": true,
     "declaration": false,
-    "emitDeclarationOnly": false,
     "jsx": "react-jsx",
-    "noEmit": false
+    "noEmit": false,
+    "isolatedModules": true
   },
   "include": ["src/backend/**/*", "src/types/**/*"],
   "exclude": ["node_modules", "dist", "src/components", "src/main.tsx"]
