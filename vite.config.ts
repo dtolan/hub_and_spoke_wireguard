@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/api': {
           target: 'http://127.0.0.1:3000',
-          changeOrigin: true,
+          changeOrigin: false, // Keep original host header so backend knows the public-facing host
           secure: false,
           ws: true,
           configure: (proxy, _options) => {
@@ -31,7 +31,7 @@ export default defineConfig(({ mode }) => {
               console.log('proxy error', err);
             });
             proxy.on('proxyReq', (proxyReq, req, _res) => {
-              console.log('Proxying:', req.method, req.url, '->', proxyReq.path);
+              console.log('Proxying:', req.method, req.url, 'Host:', req.headers.host, '->', proxyReq.path);
             });
           }
         },
