@@ -72,3 +72,10 @@ nul
 *~
 .tmp/
 temp/
+
+# Database files
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
