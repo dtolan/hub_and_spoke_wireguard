@@ -39,11 +39,13 @@ export function initializeDatabase() {
       expires_at TEXT NOT NULL,
       used INTEGER DEFAULT 0,
       used_at TEXT,
-      hub_endpoint TEXT NOT NULL,
+      hub_public_endpoint TEXT NOT NULL,
+      hub_private_endpoint TEXT,
       hub_public_key TEXT NOT NULL,
       network_cidr TEXT NOT NULL,
       dns TEXT,
-      persistent_keepalive INTEGER DEFAULT 25
+      persistent_keepalive INTEGER DEFAULT 25,
+      use_private_endpoint INTEGER DEFAULT 0
     )
   `)
 
@@ -91,7 +93,8 @@ export function initializeDatabase() {
       public_key TEXT NOT NULL,
       network_cidr TEXT NOT NULL,
       dns TEXT,
-      endpoint TEXT NOT NULL,
+      public_endpoint TEXT NOT NULL,
+      private_endpoint TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )

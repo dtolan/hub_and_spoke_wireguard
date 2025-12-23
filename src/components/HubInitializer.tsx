@@ -12,7 +12,8 @@ export function HubInitializer() {
   const [formData, setFormData] = useState<HubInitConfig>({
     networkCIDR: '10.0.1.0/24',
     listenPort: 51820,
-    endpoint: '',
+    publicEndpoint: '',
+    privateEndpoint: '',
     dns: ['1.1.1.1', '8.8.8.8'],
   })
 
@@ -34,11 +35,16 @@ export function HubInitializer() {
       errors.listenPort = 'Port must be between 1 and 65535'
     }
 
-    // Validate endpoint
-    if (!formData.endpoint) {
-      errors.endpoint = 'Endpoint is required'
-    } else if (!/^[\w\-.]+:\d+$/.test(formData.endpoint)) {
-      errors.endpoint = 'Endpoint must be in format: host:port (e.g., vpn.example.com:51820)'
+    // Validate public endpoint
+    if (!formData.publicEndpoint) {
+      errors.publicEndpoint = 'Public endpoint is required'
+    } else if (!/^[\w\-.]+:\d+$/.test(formData.publicEndpoint)) {
+      errors.publicEndpoint = 'Endpoint must be in format: host:port (e.g., vpn.example.com:51820)'
+    }
+
+    // Validate private endpoint (optional)
+    if (formData.privateEndpoint && !/^[\w\-.]+:\d+$/.test(formData.privateEndpoint)) {
+      errors.privateEndpoint = 'Endpoint must be in format: host:port (e.g., 192.168.1.15:51820)'
     }
 
     setValidationErrors(errors)
@@ -136,24 +142,47 @@ export function HubInitializer() {
 
           {/* Public Endpoint */}
           <div>
-            <label htmlFor="endpoint" className="block text-sm font-medium text-gray-700 mb-2">
-              Public Endpoint
+            <label htmlFor="publicEndpoint" className="block text-sm font-medium text-gray-700 mb-2">
+              Public Endpoint <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
-              id="endpoint"
-              value={formData.endpoint}
-              onChange={(e) => updateField('endpoint', e.target.value)}
+              id="publicEndpoint"
+              value={formData.publicEndpoint}
+              onChange={(e) => updateField('publicEndpoint', e.target.value)}
               className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                validationErrors.endpoint ? 'border-red-500' : 'border-gray-300'
+                validationErrors.publicEndpoint ? 'border-red-500' : 'border-gray-300'
               }`}
               placeholder="vpn.example.com:51820 or 203.0.113.5:51820"
             />
-            {validationErrors.endpoint && (
-              <p className="mt-1 text-sm text-red-600">{validationErrors.endpoint}</p>
+            {validationErrors.publicEndpoint && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.publicEndpoint}</p>
             )}
             <p className="mt-1 text-sm text-gray-500">
-              Public IP or domain name that spokes will use to connect (format: host:port)
+              Public IP or domain name for external spokes to connect (format: host:port)
+            </p>
+          </div>
+
+          {/* Private Endpoint (Optional) */}
+          <div>
+            <label htmlFor="privateEndpoint" className="block text-sm font-medium text-gray-700 mb-2">
+              Private Endpoint (optional)
+            </label>
+            <input
+              type="text"
+              id="privateEndpoint"
+              value={formData.privateEndpoint || ''}
+              onChange={(e) => updateField('privateEndpoint', e.target.value)}
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                validationErrors.privateEndpoint ? 'border-red-500' : 'border-gray-300'
+              }`}
+              placeholder="192.168.1.15:51820"
+            />
+            {validationErrors.privateEndpoint && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.privateEndpoint}</p>
+            )}
+            <p className="mt-1 text-sm text-gray-500">
+              Private/internal IP for spokes on the same network (format: host:port)
             </p>
           </div>
 

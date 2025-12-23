@@ -71,11 +71,13 @@ export interface InstallationToken {
   expiresAt: Date
   used: boolean
   usedAt?: Date
-  hubEndpoint: string
+  hubPublicEndpoint: string  // Public endpoint for external spokes
+  hubPrivateEndpoint?: string  // Private endpoint for internal spokes (optional)
   hubPublicKey: string
   networkCIDR: string
   dns?: string[]
   persistentKeepalive: number
+  usePrivateEndpoint?: boolean  // Flag to indicate which endpoint this token should use
 }
 
 /**
@@ -119,7 +121,8 @@ export interface HubConfig {
   publicKey: string
   networkCIDR: string
   dns?: string[]
-  endpoint: string
+  publicEndpoint: string  // Public IP/domain for external spokes
+  privateEndpoint?: string  // Private IP for internal spokes (optional)
   createdAt: Date
   updatedAt: Date
 }
@@ -130,7 +133,8 @@ export interface HubConfig {
 export interface HubInitConfig {
   networkCIDR: string
   listenPort: number
-  endpoint: string
+  publicEndpoint: string  // Public IP/domain for external spokes
+  privateEndpoint?: string  // Private IP for internal spokes (optional)
   dns?: string[]
 }
 

@@ -137,7 +137,8 @@ PrivateKey = ${privateKey}
       publicKey,
       networkCIDR: config.networkCIDR,
       dns: config.dns,
-      endpoint: config.endpoint,
+      publicEndpoint: config.publicEndpoint,
+      privateEndpoint: config.privateEndpoint,
       createdAt: new Date(),
       updatedAt: new Date(),
     }

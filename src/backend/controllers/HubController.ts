@@ -30,12 +30,12 @@ export class HubController {
       }
 
       // Validate request body
-      const { networkCIDR, listenPort, endpoint, dns } = req.body as HubInitConfig
+      const { networkCIDR, listenPort, publicEndpoint, privateEndpoint, dns } = req.body as HubInitConfig
 
-      if (!networkCIDR || !listenPort || !endpoint) {
+      if (!networkCIDR || !listenPort || !publicEndpoint) {
         res.status(400).json({
           error: 'Missing required fields',
-          required: ['networkCIDR', 'listenPort', 'endpoint'],
+          required: ['networkCIDR', 'listenPort', 'publicEndpoint'],
         })
         return
       }
@@ -44,7 +44,8 @@ export class HubController {
       const hubConfig = await WireGuardService.initializeHub({
         networkCIDR,
         listenPort,
-        endpoint,
+        publicEndpoint,
+        privateEndpoint,
         dns,
       })
 
@@ -52,8 +53,8 @@ export class HubController {
       const stmt = db.prepare(`
         INSERT INTO hub_config (
           id, interface_address, listen_port, private_key, public_key,
-          network_cidr, dns, endpoint, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          network_cidr, dns, public_endpoint, private_endpoint, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
       stmt.run(
@@ -64,7 +65,8 @@ export class HubController {
         hubConfig.publicKey,
         hubConfig.networkCIDR,
         JSON.stringify(hubConfig.dns || []),
-        hubConfig.endpoint,
+        hubConfig.publicEndpoint,
+        hubConfig.privateEndpoint || null,
         hubConfig.createdAt.toISOString(),
         hubConfig.updatedAt.toISOString()
       )
@@ -115,7 +117,8 @@ export class HubController {
         publicKey: row.public_key as string,
         networkCIDR: row.network_cidr as string,
         dns: JSON.parse((row.dns as string) || '[]'),
-        endpoint: row.endpoint as string,
+        publicEndpoint: row.public_endpoint as string,
+        privateEndpoint: (row.private_endpoint as string) || undefined,
         createdAt: new Date(row.created_at as string),
         updatedAt: new Date(row.updated_at as string),
       }
@@ -151,8 +154,8 @@ export class HubController {
         return
       }
 
-      // Only allow updating: dns, endpoint
-      const { dns, endpoint } = req.body
+      // Only allow updating: dns, publicEndpoint, privateEndpoint
+      const { dns, publicEndpoint, privateEndpoint } = req.body
 
       const updates: string[] = []
       const values: unknown[] = []
@@ -162,15 +165,20 @@ export class HubController {
         values.push(JSON.stringify(dns))
       }
 
-      if (endpoint !== undefined) {
-        updates.push('endpoint = ?')
-        values.push(endpoint)
+      if (publicEndpoint !== undefined) {
+        updates.push('public_endpoint = ?')
+        values.push(publicEndpoint)
+      }
+
+      if (privateEndpoint !== undefined) {
+        updates.push('private_endpoint = ?')
+        values.push(privateEndpoint)
       }
 
       if (updates.length === 0) {
         res.status(400).json({
           error: 'No valid fields to update',
-          allowedFields: ['dns', 'endpoint'],
+          allowedFields: ['dns', 'publicEndpoint', 'privateEndpoint'],
         })
         return
       }
@@ -207,7 +215,8 @@ export class HubController {
         publicKey: updated.public_key as string,
         networkCIDR: updated.network_cidr as string,
         dns: JSON.parse((updated.dns as string) || '[]'),
-        endpoint: updated.endpoint as string,
+        publicEndpoint: updated.public_endpoint as string,
+        privateEndpoint: (updated.private_endpoint as string) || undefined,
         createdAt: new Date(updated.created_at as string),
         updatedAt: new Date(updated.updated_at as string),
       }
