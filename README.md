@@ -9,6 +9,19 @@ A **production-ready** web-based management system for deploying and managing Wi
 
 > **Purpose**: This is a **proof-of-concept** and **reference implementation** designed to be extended, integrated, or used as a foundation for production VPN management systems. The codebase demonstrates best practices for secure token-based provisioning, automatic endpoint detection, and multi-platform deployment automation.
 
+## 📚 Documentation
+
+**→ [Complete Installation Guide](docs/installation/README.md)** - Comprehensive step-by-step installation documentation for hub and all spoke platforms
+
+Quick links:
+- [Hub Setup Guide](docs/installation/hub-setup.md) - Install and configure the central hub
+- [Linux Spoke Installation](docs/installation/spoke-linux.md)
+- [Windows Spoke Installation](docs/installation/spoke-windows.md)
+- [macOS Spoke Installation](docs/installation/spoke-macos.md)
+- [Proxmox Spoke Installation](docs/installation/spoke-proxmox.md)
+- [Prerequisites](docs/installation/prerequisites.md) - System requirements
+- [Troubleshooting Guide](docs/installation/troubleshooting.md) - Common issues and solutions
+
 ---
 
 ## 📋 Table of Contents
