@@ -78,6 +78,12 @@ export interface InstallationToken {
   dns?: string[]
   persistentKeepalive: number
   usePrivateEndpoint?: boolean  // Flag to indicate which endpoint this token should use
+
+  // Group token fields
+  isGroupToken?: boolean
+  groupName?: string
+  maxRegistrations?: number | null
+  registrationCount?: number
 }
 
 /**
@@ -94,6 +100,11 @@ export interface SpokeRegistration {
   status: 'pending' | 'active' | 'inactive'
   os: 'linux' | 'macos' | 'windows' | 'proxmox'
 
+  // Server identity fields (for group tokens)
+  hostname?: string
+  localIP?: string
+  machineUUID?: string
+
   // Proxmox-specific fields
   isProxmox?: boolean
   proxmoxClusterId?: string
@@ -103,6 +114,7 @@ export interface SpokeRegistration {
   metadata?: {
     wireguardVersion?: string
     ipAddress?: string
+    groupToken?: string  // Group name if registered via group token
     // Proxmox metadata
     proxmoxClusterName?: string
     proxmoxClusterNodes?: string

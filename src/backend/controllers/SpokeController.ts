@@ -20,6 +20,9 @@ export class SpokeController {
         token,
         publicKey,
         os,
+        hostname,
+        localIP,
+        machineUUID,
         isProxmox,
         proxmoxNodeName,
         proxmoxClusterName,
@@ -48,7 +51,7 @@ export class SpokeController {
 
       const db = getDatabase()
 
-      // Validate token (this also checks if already used)
+      // Validate token (this also checks if already used for individual tokens)
       let tokenData
       try {
         tokenData = TokenService.validateToken(token)
@@ -82,6 +85,201 @@ export class SpokeController {
         throw error
       }
 
+      // Handle group token flow
+      if (tokenData.isGroupToken) {
+        // Check registration limit
+        if (
+          tokenData.maxRegistrations !== null &&
+          tokenData.maxRegistrations !== undefined &&
+          tokenData.registrationCount !== undefined &&
+          tokenData.registrationCount >= tokenData.maxRegistrations
+        ) {
+          res.status(400).json({
+            error: 'Group token registration limit reached',
+            code: 'GROUP_TOKEN_LIMIT_REACHED',
+            limit: tokenData.maxRegistrations,
+          })
+          return
+        }
+
+        // Require hostname for group tokens
+        if (!hostname) {
+          res.status(400).json({
+            error: 'Hostname is required for group token registration',
+            code: 'MISSING_HOSTNAME',
+            required: ['hostname'],
+          })
+          return
+        }
+
+        // Check for duplicate registration (same hostname OR machine UUID)
+        const existing = db
+          .prepare(
+            `
+          SELECT * FROM spoke_registrations
+          WHERE token_id = ? AND (hostname = ? OR machine_uuid = ?)
+        `
+          )
+          .get(tokenData.id, hostname, machineUUID || '') as
+          | Record<string, unknown>
+          | undefined
+
+        if (existing) {
+          res.status(400).json({
+            error: 'This server has already registered with this group token',
+            code: 'DUPLICATE_GROUP_REGISTRATION',
+            existingSpoke: existing.name,
+            hint: 'If re-installing, delete the existing spoke first or use a different token',
+          })
+          return
+        }
+
+        // Get all used IPs to allocate next available
+        const existingTokens = db
+          .prepare('SELECT allowed_ips FROM installation_tokens')
+          .all() as Array<{ allowed_ips: string }>
+        const existingSpokes = db
+          .prepare('SELECT allowed_ips FROM spoke_registrations')
+          .all() as Array<{ allowed_ips: string }>
+
+        // Get hub config to get interfaceAddress
+        const hubConfig = db.prepare('SELECT * FROM hub_config WHERE id = 1').get() as
+          | Record<string, unknown>
+          | undefined
+
+        if (!hubConfig) {
+          res.status(500).json({
+            error: 'Hub not initialized',
+            code: 'HUB_NOT_INITIALIZED',
+          })
+          return
+        }
+
+        const { IPAddressPool } = await import('../services/IPAddressPool.js')
+        const usedIPs = IPAddressPool.extractAllowedIPs([
+          ...existingTokens.map((t) => ({ allowedIPs: t.allowed_ips })),
+          ...existingSpokes.map((s) => ({ allowedIPs: s.allowed_ips })),
+          { allowedIPs: [hubConfig.interface_address as string] },
+        ])
+
+        const allocatedIP = IPAddressPool.getNextAvailableIP(
+          tokenData.networkCIDR,
+          usedIPs
+        )
+
+        // Generate unique spoke name: groupName-hostname
+        const spokeName = `${tokenData.groupName}-${hostname}`
+
+        // Handle Proxmox-specific logic
+        let proxmoxClusterId: string | null = null
+
+        if (isProxmox && proxmoxClusterName) {
+          let cluster = db
+            .prepare('SELECT * FROM proxmox_clusters WHERE cluster_name = ?')
+            .get(proxmoxClusterName) as Record<string, unknown> | undefined
+
+          if (!cluster) {
+            proxmoxClusterId = uuidv4()
+            db.prepare(
+              `
+              INSERT INTO proxmox_clusters (id, cluster_name, created_at, updated_at)
+              VALUES (?, ?, ?, ?)
+            `
+            ).run(
+              proxmoxClusterId,
+              proxmoxClusterName,
+              new Date().toISOString(),
+              new Date().toISOString()
+            )
+          } else {
+            proxmoxClusterId = cluster.id as string
+          }
+        }
+
+        // Create spoke registration with identity fields
+        const registrationId = uuidv4()
+        const now = new Date().toISOString()
+
+        const enrichedMetadata = {
+          ...(metadata || {}),
+          groupToken: tokenData.groupName,
+        }
+
+        db.prepare(
+          `
+          INSERT INTO spoke_registrations (
+            id, token_id, name, public_key, allowed_ips, registered_at,
+            status, os, hostname, local_ip, machine_uuid,
+            is_proxmox, proxmox_cluster_id, proxmox_node_name,
+            proxmox_version, metadata
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `
+        ).run(
+          registrationId,
+          tokenData.id,
+          spokeName,
+          publicKey,
+          JSON.stringify([allocatedIP]),
+          now,
+          'active',
+          os,
+          hostname,
+          localIP || null,
+          machineUUID || null,
+          isProxmox ? 1 : 0,
+          proxmoxClusterId,
+          proxmoxNodeName || null,
+          proxmoxVersion || null,
+          JSON.stringify(enrichedMetadata)
+        )
+
+        // Increment registration count (DON'T mark token as used)
+        db.prepare(
+          `
+          UPDATE installation_tokens
+          SET registration_count = registration_count + 1
+          WHERE id = ?
+        `
+        ).run(tokenData.id)
+
+        // Add spoke peer to WireGuard hub
+        const spokeRegistration: SpokeRegistration = {
+          id: registrationId,
+          tokenId: tokenData.id,
+          name: spokeName,
+          publicKey,
+          allowedIPs: [allocatedIP],
+          registeredAt: new Date(now),
+          status: 'active',
+          os: os as 'linux' | 'macos' | 'windows' | 'proxmox',
+          hostname,
+          localIP,
+          machineUUID,
+          isProxmox: isProxmox || false,
+          proxmoxClusterId: proxmoxClusterId || undefined,
+          proxmoxNodeName: proxmoxNodeName || undefined,
+          proxmoxVersion: proxmoxVersion || undefined,
+          metadata: enrichedMetadata,
+        }
+
+        await WireGuardService.addSpokePeer(spokeRegistration)
+
+        res.status(201).json({
+          message: `Server registered as ${spokeName} with IP ${allocatedIP}`,
+          spoke: {
+            id: registrationId,
+            name: spokeName,
+            allowedIPs: [allocatedIP],
+            registeredAt: now,
+            status: 'active',
+          },
+        })
+
+        return
+      }
+
+      // ===== INDIVIDUAL TOKEN FLOW (existing logic) =====
+
       // Check for duplicate public key (prevent impersonation)
       const existingSpoke = db
         .prepare('SELECT * FROM spoke_registrations WHERE public_key = ?')
@@ -100,13 +298,11 @@ export class SpokeController {
       let proxmoxClusterId: string | null = null
 
       if (isProxmox && proxmoxClusterName) {
-        // Check if cluster exists
         let cluster = db
           .prepare('SELECT * FROM proxmox_clusters WHERE cluster_name = ?')
           .get(proxmoxClusterName) as Record<string, unknown> | undefined
 
         if (!cluster) {
-          // Create new cluster
           proxmoxClusterId = uuidv4()
           db.prepare(
             `
@@ -132,9 +328,10 @@ export class SpokeController {
         `
         INSERT INTO spoke_registrations (
           id, token_id, name, public_key, allowed_ips, registered_at,
-          status, os, is_proxmox, proxmox_cluster_id, proxmox_node_name,
+          status, os, hostname, local_ip, machine_uuid,
+          is_proxmox, proxmox_cluster_id, proxmox_node_name,
           proxmox_version, metadata
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
       ).run(
         registrationId,
@@ -145,6 +342,9 @@ export class SpokeController {
         now,
         'active',
         os,
+        hostname || null,
+        localIP || null,
+        machineUUID || null,
         isProxmox ? 1 : 0,
         proxmoxClusterId,
         proxmoxNodeName || null,
@@ -171,6 +371,9 @@ export class SpokeController {
         registeredAt: new Date(now),
         status: 'active',
         os: os as 'linux' | 'macos' | 'windows' | 'proxmox',
+        hostname,
+        localIP,
+        machineUUID,
         isProxmox: isProxmox || false,
         proxmoxClusterId: proxmoxClusterId || undefined,
         proxmoxNodeName: proxmoxNodeName || undefined,

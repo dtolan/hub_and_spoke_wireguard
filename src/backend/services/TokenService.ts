@@ -101,6 +101,81 @@ export class TokenService {
   }
 
   /**
+   * Generate a group installation token (reusable)
+   */
+  static generateGroupToken(params: {
+    groupName: string
+    hubConfig: HubConfig
+    expirationHours?: number
+    maxRegistrations?: number | null
+  }): InstallationToken {
+    const { groupName, hubConfig, expirationHours = 168, maxRegistrations = null } = params
+
+    // Generate cryptographically secure token
+    const token = randomBytes(32).toString('base64url')
+    const tokenId = uuidv4()
+
+    // Create expiration date (default 7 days for group tokens)
+    const createdAt = new Date()
+    const expiresAt = new Date(createdAt.getTime() + expirationHours * 60 * 60 * 1000)
+
+    const tokenRecord: InstallationToken = {
+      id: tokenId,
+      token,
+      spokeId: '', // Not used for group tokens
+      spokeName: groupName,
+      allowedIPs: [], // Allocated at registration time
+      createdAt,
+      expiresAt,
+      used: false, // Group tokens never marked as "used"
+      hubPublicEndpoint: hubConfig.publicEndpoint,
+      hubPrivateEndpoint: hubConfig.privateEndpoint,
+      hubPublicKey: hubConfig.publicKey,
+      networkCIDR: hubConfig.networkCIDR,
+      dns: hubConfig.dns,
+      persistentKeepalive: 25,
+      isGroupToken: true,
+      groupName,
+      maxRegistrations,
+      registrationCount: 0,
+    }
+
+    // Store in database
+    const stmt = db.prepare(`
+      INSERT INTO installation_tokens (
+        id, token, spoke_id, spoke_name, allowed_ips,
+        created_at, expires_at, used, hub_public_endpoint, hub_private_endpoint,
+        hub_public_key, network_cidr, dns, persistent_keepalive, use_private_endpoint,
+        is_group_token, group_name, max_registrations, registration_count
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+
+    stmt.run(
+      tokenRecord.id,
+      tokenRecord.token,
+      tokenRecord.spokeId,
+      tokenRecord.spokeName,
+      JSON.stringify(tokenRecord.allowedIPs),
+      tokenRecord.createdAt.toISOString(),
+      tokenRecord.expiresAt.toISOString(),
+      tokenRecord.used ? 1 : 0,
+      tokenRecord.hubPublicEndpoint,
+      tokenRecord.hubPrivateEndpoint || null,
+      tokenRecord.hubPublicKey,
+      tokenRecord.networkCIDR,
+      tokenRecord.dns ? JSON.stringify(tokenRecord.dns) : null,
+      tokenRecord.persistentKeepalive,
+      0, // use_private_endpoint
+      1, // is_group_token
+      tokenRecord.groupName,
+      tokenRecord.maxRegistrations,
+      tokenRecord.registrationCount
+    )
+
+    return tokenRecord
+  }
+
+  /**
    * Validate token without marking as used
    */
   static validateToken(token: string): InstallationToken {
@@ -226,6 +301,10 @@ export class TokenService {
       dns: row.dns ? JSON.parse(row.dns) : undefined,
       persistentKeepalive: row.persistent_keepalive,
       usePrivateEndpoint: Boolean(row.use_private_endpoint),
+      isGroupToken: Boolean(row.is_group_token),
+      groupName: row.group_name || undefined,
+      maxRegistrations: row.max_registrations !== null ? row.max_registrations : undefined,
+      registrationCount: row.registration_count || 0,
     }
   }
 }

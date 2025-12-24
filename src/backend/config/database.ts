@@ -45,7 +45,11 @@ export function initializeDatabase() {
       network_cidr TEXT NOT NULL,
       dns TEXT,
       persistent_keepalive INTEGER DEFAULT 25,
-      use_private_endpoint INTEGER DEFAULT 0
+      use_private_endpoint INTEGER DEFAULT 0,
+      is_group_token INTEGER DEFAULT 0,
+      group_name TEXT,
+      max_registrations INTEGER,
+      registration_count INTEGER DEFAULT 0
     )
   `)
 
@@ -77,6 +81,9 @@ export function initializeDatabase() {
       proxmox_cluster_id TEXT,
       proxmox_node_name TEXT,
       proxmox_version TEXT,
+      hostname TEXT,
+      local_ip TEXT,
+      machine_uuid TEXT,
       metadata TEXT,
       FOREIGN KEY (token_id) REFERENCES installation_tokens(id),
       FOREIGN KEY (proxmox_cluster_id) REFERENCES proxmox_clusters(id)
